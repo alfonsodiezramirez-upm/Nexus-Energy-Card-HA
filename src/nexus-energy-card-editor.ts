@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import { DEFAULT_CONFIG } from "./default-config";
+import { EMPTY_CONFIG } from "./default-config";
 import type {
   HomeAssistantLike,
   NexusBackgroundStyle,
@@ -13,6 +13,12 @@ import type {
 
 const SOURCE_PARENT_ID = "__source__";
 const ALL_NODES_ID = "__all__";
+const EMPTY_MAIN_NODE: NexusEnergyNodeConfig = {
+  id: "home",
+  name: "Casa",
+  icon: "mdi:home-outline",
+  children: []
+};
 
 const COMMON_ICONS = [
   "mdi:home-outline",
@@ -55,23 +61,27 @@ interface FlatEditorNode {
 
 @customElement("nexus-energy-card-editor")
 export class NexusEnergyCardEditor extends LitElement {
-  @state() private _config: NexusEnergyCardConfig = DEFAULT_CONFIG;
-  @state() private _flatNodes: FlatEditorNode[] = flattenConfig(DEFAULT_CONFIG);
-  @state() private _mode: NexusMode = DEFAULT_CONFIG.mode ?? "power";
+  @state() private _config: NexusEnergyCardConfig = EMPTY_CONFIG;
+  @state() private _flatNodes: FlatEditorNode[] = [];
+  @state() private _mode: NexusMode = EMPTY_CONFIG.mode ?? "power";
+  @state() private _expandedNodeId?: string;
 
   private _hass?: HomeAssistantLike;
 
   public setConfig(config: NexusEnergyCardConfig): void {
     this._config = {
-      ...DEFAULT_CONFIG,
+      ...EMPTY_CONFIG,
       ...config,
       thresholds: {
-        ...DEFAULT_CONFIG.thresholds,
+        ...EMPTY_CONFIG.thresholds,
         ...config.thresholds
-      }
+      },
+      sources: config.sources ?? [],
+      nodes: config.nodes ?? []
     };
     this._mode = this._config.mode ?? "power";
     this._flatNodes = flattenConfig(this._config);
+    this._expandedNodeId = undefined;
   }
 
   public set hass(hass: HomeAssistantLike) {
@@ -155,20 +165,31 @@ export class NexusEnergyCardEditor extends LitElement {
   }
 
   private _renderBuilder(mainNode: NexusEnergyNodeConfig, entities: EntityOption[]) {
+    const hasNodes = this._flatNodes.length > 0;
+
     return html`
       <section class="panel">
         <div class="panel-head">
           <h4>Constructor del arbol</h4>
-          <div class="head-actions">
-            <button type="button" @click=${() => this._addNode(SOURCE_PARENT_ID)}>Fuente</button>
-            <button type="button" @click=${() => this._addNode(this._mainId())}>Nodo</button>
-          </div>
+          ${hasNodes
+            ? html`
+                <div class="head-actions">
+                  <button type="button" @click=${() => this._addNode(SOURCE_PARENT_ID)}>Fuente</button>
+                  <button type="button" @click=${() => this._addNode(this._mainId())}>Nodo</button>
+                </div>
+              `
+            : nothing}
         </div>
-        <div class="node-list">
-          ${this._flatNodes.length
-            ? this._flatNodes.map((node) => this._renderNodeRow(node, mainNode, entities))
-            : html`<div class="empty-state">Anade una fuente o un nodo para empezar.</div>`}
-        </div>
+        ${hasNodes
+          ? html`<div class="node-list">${this._flatNodes.map((node) => this._renderNodeRow(node, mainNode, entities))}</div>`
+          : html`
+              <div class="zero-state">
+                <button class="primary-add" type="button" @click=${() => this._addNode(this._mainId())}>
+                  <span class="add-mark">+</span>
+                  Anadir Primer Nodo
+                </button>
+              </div>
+            `}
       </section>
     `;
   }
@@ -177,69 +198,86 @@ export class NexusEnergyCardEditor extends LitElement {
     const isSource = node.parentId === SOURCE_PARENT_ID;
     const depth = isSource ? 0 : this._depthOf(node);
     const parentLabel = isSource ? "Raiz/Fuente" : node.parentId === this._mainId() ? mainNode.name ?? "Casa" : this._nodeName(node.parentId);
+    const entityLabel = node.entity ?? node.power_entity ?? node.energy_entity ?? "Sin entidad";
+    const isExpanded = this._expandedNodeId === node.id;
 
     return html`
       <article class=${`node-row ${isSource ? "is-source" : ""}`} style=${`--depth:${depth}`}>
         <div class="row-title">
-          <span class="row-icon"><ha-icon icon=${node.icon ?? (isSource ? "mdi:flash" : "mdi:power-plug-outline")}></ha-icon></span>
-          <div>
-            <strong>${node.name || "Nodo sin nombre"}</strong>
-            <small>${parentLabel}</small>
-          </div>
+          <button
+            class="row-toggle"
+            type="button"
+            aria-expanded=${isExpanded}
+            title=${isExpanded ? "Contraer" : "Editar"}
+            @click=${() => this._toggleNode(node.id)}
+          >
+            <span class="row-icon"><ha-icon icon=${node.icon ?? (isSource ? "mdi:flash" : "mdi:power-plug-outline")}></ha-icon></span>
+            <span class="row-summary">
+              <strong>${node.name || "Nodo sin nombre"}</strong>
+              <small>${entityLabel} - ${parentLabel}</small>
+            </span>
+            <ha-icon class="chevron" icon=${isExpanded ? "mdi:chevron-up" : "mdi:chevron-down"}></ha-icon>
+          </button>
           <button class="icon-button danger" type="button" title="Eliminar" @click=${() => this._removeNode(node.id)}>
             <ha-icon icon="mdi:trash-can-outline"></ha-icon>
           </button>
         </div>
 
-        <div class="grid node-grid">
-          ${this._renderEntityField("Entidad", node.entity ?? node.power_entity ?? node.energy_entity ?? "", entities, (entityId) =>
-            this._patchNode(node.id, this._entityPatch(entityId))
-          )}
-          <label>
-            Nombre a mostrar
-            <input .value=${node.name} @input=${(event: Event) => this._patchNode(node.id, { name: cleanText(valueOf(event)) })} />
-          </label>
-          <label>
-            Icono
-            <input
-              list="nexus-icons"
-              .value=${node.icon ?? ""}
-              @input=${(event: Event) => this._patchNode(node.id, { icon: cleanText(valueOf(event)) || undefined })}
-            />
-          </label>
-          <label>
-            Nodo padre
-            <select .value=${node.parentId} @change=${(event: Event) => this._patchNode(node.id, { parentId: valueOf(event) })}>
-              <option value=${SOURCE_PARENT_ID} ?selected=${node.parentId === SOURCE_PARENT_ID}>Raiz/Fuente</option>
-              <option value=${this._mainId()} ?selected=${node.parentId === this._mainId()}>${mainNode.name ?? "Casa"}</option>
-              ${this._flatNodes
-                .filter((parent) => this._canUseAsParent(parent, node))
-                .map((parent) => html`<option value=${parent.id} ?selected=${node.parentId === parent.id}>${parent.name}</option>`)}
-            </select>
-          </label>
-          <label>
-            Direccion
-            <select
-              .value=${node.direction ?? "auto"}
-              @change=${(event: Event) => this._patchNode(node.id, { direction: valueOf(event) as NexusDirection })}
-            >
-              <option value="auto">Auto</option>
-              <option value="import">Importar</option>
-              <option value="export">Exportar</option>
-            </select>
-          </label>
-          <label>
-            Capacidad kW
-            <input
-              type="number"
-              min="0"
-              step="0.1"
-              .value=${node.capacity === undefined ? "" : String(node.capacity)}
-              @input=${(event: Event) => this._patchNode(node.id, { capacity: optionalNumber(valueOf(event)) })}
-            />
-          </label>
-          ${this._renderCheck("Invertir valor", node.invert_value === true, (checked) => this._patchNode(node.id, { invert_value: checked }))}
-        </div>
+        ${isExpanded
+          ? html`
+              <div class="node-form">
+                <div class="grid node-grid">
+                  ${this._renderEntityField("Entidad", node.entity ?? node.power_entity ?? node.energy_entity ?? "", entities, (entityId) =>
+                    this._patchNode(node.id, this._entityPatch(entityId))
+                  )}
+                  <label>
+                    Nombre a mostrar
+                    <input .value=${node.name} @input=${(event: Event) => this._patchNode(node.id, { name: cleanText(valueOf(event)) })} />
+                  </label>
+                  <label>
+                    Icono
+                    <input
+                      list="nexus-icons"
+                      .value=${node.icon ?? ""}
+                      @input=${(event: Event) => this._patchNode(node.id, { icon: cleanText(valueOf(event)) || undefined })}
+                    />
+                  </label>
+                  <label>
+                    Nodo padre
+                    <select .value=${node.parentId} @change=${(event: Event) => this._patchNode(node.id, { parentId: valueOf(event) })}>
+                      <option value=${SOURCE_PARENT_ID} ?selected=${node.parentId === SOURCE_PARENT_ID}>Raiz/Fuente</option>
+                      <option value=${this._mainId()} ?selected=${node.parentId === this._mainId()}>${mainNode.name ?? "Casa"}</option>
+                      ${this._flatNodes
+                        .filter((parent) => this._canUseAsParent(parent, node))
+                        .map((parent) => html`<option value=${parent.id} ?selected=${node.parentId === parent.id}>${parent.name}</option>`)}
+                    </select>
+                  </label>
+                  <label>
+                    Direccion
+                    <select
+                      .value=${node.direction ?? "auto"}
+                      @change=${(event: Event) => this._patchNode(node.id, { direction: valueOf(event) as NexusDirection })}
+                    >
+                      <option value="auto">Auto</option>
+                      <option value="import">Importar</option>
+                      <option value="export">Exportar</option>
+                    </select>
+                  </label>
+                  <label>
+                    Capacidad kW
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      .value=${node.capacity === undefined ? "" : String(node.capacity)}
+                      @input=${(event: Event) => this._patchNode(node.id, { capacity: optionalNumber(valueOf(event)) })}
+                    />
+                  </label>
+                  ${this._renderCheck("Invertir valor", node.invert_value === true, (checked) => this._patchNode(node.id, { invert_value: checked }))}
+                </div>
+              </div>
+            `
+          : nothing}
       </article>
     `;
   }
@@ -421,11 +459,10 @@ export class NexusEnergyCardEditor extends LitElement {
   };
 
   private _patchConfig<K extends keyof NexusEnergyCardConfig>(key: K, value: NexusEnergyCardConfig[K]): void {
-    this._config = {
+    this._commitConfig({
       ...this._config,
       [key]: value
-    };
-    this._emitConfig();
+    });
   }
 
   private _patchMain(patch: Partial<NexusEnergyNodeConfig>): void {
@@ -467,6 +504,7 @@ export class NexusEnergyCardEditor extends LitElement {
         direction: "auto"
       }
     ];
+    this._expandedNodeId = id;
     this._emitConfig();
   }
 
@@ -483,7 +521,14 @@ export class NexusEnergyCardEditor extends LitElement {
       }
     }
     this._flatNodes = this._flatNodes.filter((node) => !descendants.has(node.id));
+    if (this._expandedNodeId && descendants.has(this._expandedNodeId)) {
+      this._expandedNodeId = undefined;
+    }
     this._emitConfig();
+  }
+
+  private _toggleNode(id: string): void {
+    this._expandedNodeId = this._expandedNodeId === id ? undefined : id;
   }
 
   private _addThreshold = (): void => {
@@ -539,7 +584,7 @@ export class NexusEnergyCardEditor extends LitElement {
   }
 
   private _mainNode(): NexusEnergyNodeConfig {
-    return this._config.nodes?.[0] ?? DEFAULT_CONFIG.nodes?.[0] ?? { id: "home", name: "Casa", icon: "mdi:home-outline" };
+    return this._config.nodes?.[0] ?? EMPTY_MAIN_NODE;
   }
 
   private _mainId(): string {
@@ -583,19 +628,29 @@ export class NexusEnergyCardEditor extends LitElement {
   private _emitConfig(): void {
     const main = this._mainNode();
     const mainId = main.id ?? "home";
+    const sources = this._flatNodes.filter((node) => node.parentId === SOURCE_PARENT_ID).map((node) => rowToConfig(node));
+    const children = buildChildren(this._flatNodes, mainId);
+    const nodes =
+      children.length || this._hasConfiguredMain(main)
+        ? [
+            {
+              ...main,
+              id: mainId,
+              children
+            }
+          ]
+        : [];
     const nextConfig: NexusEnergyCardConfig = {
       ...this._config,
       mode: this._mode,
-      sources: this._flatNodes.filter((node) => node.parentId === SOURCE_PARENT_ID).map((node) => rowToConfig(node)),
-      nodes: [
-        {
-          ...main,
-          id: mainId,
-          children: buildChildren(this._flatNodes, mainId)
-        }
-      ]
+      sources,
+      nodes
     };
 
+    this._commitConfig(nextConfig);
+  }
+
+  private _commitConfig(nextConfig: NexusEnergyCardConfig): void {
     this._config = nextConfig;
     this.dispatchEvent(
       new CustomEvent("config-changed", {
@@ -603,6 +658,18 @@ export class NexusEnergyCardEditor extends LitElement {
         bubbles: true,
         composed: true
       })
+    );
+  }
+
+  private _hasConfiguredMain(main: NexusEnergyNodeConfig): boolean {
+    return Boolean(
+      main.entity ||
+        main.power_entity ||
+        main.energy_entity ||
+        main.capacity !== undefined ||
+        main.color ||
+        (main.name && main.name !== EMPTY_MAIN_NODE.name) ||
+        (main.icon && main.icon !== EMPTY_MAIN_NODE.icon)
     );
   }
 
@@ -619,9 +686,17 @@ export class NexusEnergyCardEditor extends LitElement {
       --editor-danger: #ff6259;
     }
 
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+
     .editor {
       display: grid;
       gap: 14px;
+      max-width: 100%;
+      overflow-x: hidden;
       padding: 16px;
     }
 
@@ -693,6 +768,7 @@ export class NexusEnergyCardEditor extends LitElement {
       display: flex;
       align-items: center;
       gap: 10px;
+      min-width: 0;
     }
 
     .panel-head,
@@ -704,17 +780,21 @@ export class NexusEnergyCardEditor extends LitElement {
       margin-left: auto;
     }
 
+    .head-actions button {
+      min-width: 0;
+    }
+
     .grid {
       display: grid;
       gap: 10px;
     }
 
     .general-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: 1fr;
     }
 
     .appearance-grid {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: 1fr;
     }
 
     .node-list,
@@ -733,8 +813,7 @@ export class NexusEnergyCardEditor extends LitElement {
 
     .node-row {
       display: grid;
-      gap: 12px;
-      margin-left: calc(var(--depth) * 18px);
+      gap: 10px;
       padding: 12px;
     }
 
@@ -747,26 +826,55 @@ export class NexusEnergyCardEditor extends LitElement {
       min-width: 0;
     }
 
-    .row-title > div {
+    .row-toggle {
+      display: flex;
+      align-items: center;
+      flex: 1;
+      min-width: 0;
+      gap: 10px;
+      padding: 0;
+      border: 0;
+      color: inherit;
+      background: transparent;
+      text-align: left;
+    }
+
+    .row-toggle:hover {
+      border-color: transparent;
+      background: transparent;
+    }
+
+    .row-summary {
+      display: block;
       min-width: 0;
       flex: 1;
     }
 
-    .row-title strong,
-    .row-title small {
+    .row-summary strong,
+    .row-summary small {
       display: block;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
+    .chevron {
+      flex: 0 0 auto;
+      color: var(--editor-muted);
+    }
+
+    .node-form {
+      display: grid;
+      min-width: 0;
+    }
+
     .node-grid {
-      grid-template-columns: repeat(4, minmax(130px, 1fr));
+      grid-template-columns: 1fr;
     }
 
     .threshold-row {
       display: grid;
-      grid-template-columns: minmax(160px, 1.4fr) minmax(120px, 1fr) 96px 38px;
+      grid-template-columns: 1fr;
       gap: 10px;
       align-items: end;
       padding: 10px;
@@ -785,6 +893,7 @@ export class NexusEnergyCardEditor extends LitElement {
     select {
       box-sizing: border-box;
       width: 100%;
+      max-width: 100%;
       min-height: 36px;
       border: 1px solid rgba(150, 180, 210, 0.24);
       border-radius: 8px;
@@ -811,6 +920,8 @@ export class NexusEnergyCardEditor extends LitElement {
     }
 
     button {
+      box-sizing: border-box;
+      max-width: 100%;
       min-height: 34px;
       border: 1px solid rgba(90, 170, 255, 0.35);
       border-radius: 8px;
@@ -870,6 +981,34 @@ export class NexusEnergyCardEditor extends LitElement {
       text-align: center;
     }
 
+    .zero-state {
+      display: grid;
+      min-width: 0;
+    }
+
+    .primary-add {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 58px;
+      gap: 10px;
+      border-style: dashed;
+      font-weight: 800;
+    }
+
+    .add-mark {
+      display: grid;
+      width: 24px;
+      height: 24px;
+      place-items: center;
+      border-radius: 999px;
+      color: #04121f;
+      background: #8bd8ff;
+      font-size: 18px;
+      line-height: 1;
+    }
+
     @media (max-width: 900px) {
       .general-grid,
       .appearance-grid,
@@ -902,8 +1041,8 @@ export class NexusEnergyCardEditor extends LitElement {
 
 function flattenConfig(config: NexusEnergyCardConfig): FlatEditorNode[] {
   const rows: FlatEditorNode[] = [];
-  const main = config.nodes?.[0] ?? DEFAULT_CONFIG.nodes?.[0];
-  const mainId = main?.id ?? "home";
+  const main = config.nodes?.[0];
+  const mainId = main?.id ?? EMPTY_MAIN_NODE.id ?? "home";
 
   for (const source of config.sources ?? []) {
     rows.push(configToRow(source, SOURCE_PARENT_ID, rows.length));

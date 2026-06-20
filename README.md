@@ -18,6 +18,7 @@ Nexus Energy Card is a Home Assistant Lovelace dashboard card for visualizing a 
 - Bidirectional source support, including invert polarity.
 - Optional zero-value node hiding.
 - Per-node or global color thresholds.
+- Hover/tap tooltip with current value, parent share, and Home Assistant history sparkline.
 - Responsive desktop/mobile layout.
 - Shadow DOM styling with glass, transparent, and solid background modes.
 
@@ -94,7 +95,8 @@ title: Nexus Energy
 The easiest way to configure the card is through the Home Assistant visual editor. The editor exposes:
 
 - General settings: title, default mode, time selector, and main home entity.
-- Tree builder: entity, display name, icon, parent node, direction, capacity, and invert value.
+- Empty first-run state with no mock entities or generated demo nodes.
+- Accordion tree builder: entity, display name, icon, parent node, direction, capacity, and invert value.
 - Appearance: base flow width, animation speed, background style, zero-node hiding, and base color.
 - Color thresholds: global or per-node warning colors above a configured power/energy value.
 
@@ -207,6 +209,10 @@ nodes:
 | `color` | color string | Optional node color. |
 | `children` | array | Nested child nodes. |
 
+## Node Tooltip
+
+Hover a node on desktop or tap it on mobile to open the detail tooltip. The tooltip shows the raw current entity value, the node share relative to its parent, and a lightweight SVG sparkline loaded from Home Assistant history. Power mode requests the last hour; energy mode requests the last 24 hours. Results are cached for 60 seconds per entity and mode.
+
 ### Color thresholds
 
 `above` is interpreted as watts in power mode and as the current energy unit value in energy mode.
@@ -236,11 +242,19 @@ Local demo:
 http://127.0.0.1:5173/
 ```
 
-Local editor demo:
+Local editor zero-state demo:
 
 ```text
 http://127.0.0.1:5173/?editor=1
 ```
+
+Local editor demo with example nodes:
+
+```text
+http://127.0.0.1:5173/?editor=1&demo=1
+```
+
+If Vite selects another port because `5173` is busy, use the URL printed by `npm run dev`.
 
 ## Release Workflow
 

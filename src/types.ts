@@ -16,6 +16,13 @@ export interface HomeAssistantState {
 
 export interface HomeAssistantLike {
   states: Record<string, HomeAssistantState>;
+  callWS?: <T = unknown>(message: Record<string, unknown>) => Promise<T>;
+  callApi?: <T = unknown>(
+    method: string,
+    path: string,
+    parameters?: Record<string, unknown>,
+    headers?: Record<string, string>
+  ) => Promise<T>;
   callService?: (...args: unknown[]) => Promise<unknown> | unknown;
 }
 

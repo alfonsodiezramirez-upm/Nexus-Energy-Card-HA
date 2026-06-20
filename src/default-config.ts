@@ -1,5 +1,27 @@
 import type { NexusEnergyCardConfig } from "./types";
 
+export const EMPTY_CONFIG: NexusEnergyCardConfig = {
+  type: "custom:nexus-energy-card",
+  title: "Nexus Energy",
+  mode: "power",
+  range: "today",
+  show_time_selector: true,
+  height: 720,
+  animation: true,
+  animation_speed: 1,
+  line_width_base: 2,
+  background_style: "glass",
+  hide_zero_nodes: false,
+  base_color: "#38a5ff",
+  default_expanded_depth: 2,
+  thresholds: {
+    warning: 0.65,
+    critical: 0.85
+  },
+  sources: [],
+  nodes: []
+};
+
 export const DEFAULT_CONFIG: NexusEnergyCardConfig = {
   title: "Nexus Energy",
   mode: "power",

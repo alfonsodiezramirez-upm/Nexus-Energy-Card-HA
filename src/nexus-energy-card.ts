@@ -1,8 +1,8 @@
 import { LitElement, css, html, nothing, svg } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { buildEnergyGraph, type HistoryCache } from "./energy-graph";
-import { DEFAULT_CONFIG } from "./default-config";
-import { edgePath, layoutGraph, nodeCenter } from "./layout";
+import { DEFAULT_CONFIG, EMPTY_CONFIG } from "./default-config";
+import { edgePath, layoutGraph } from "./layout";
 import { calculateEdgeWidth } from "./flow-style";
 import { formatPercent, formatValue, rangeLabel } from "./format";
 import type {
@@ -17,6 +17,38 @@ import type {
 } from "./types";
 
 const STORE_VERSION = 1;
+const TOOLTIP_HOVER_DELAY = 250;
+const TOOLTIP_CACHE_TTL = 60_000;
+const TOOLTIP_WIDTH = 252;
+const TOOLTIP_HEIGHT = 210;
+
+interface HistoryPoint {
+  time: number;
+  value: number;
+}
+
+interface TooltipState {
+  nodeId: string;
+  entityId?: string;
+  name: string;
+  icon: string;
+  valueLabel: string;
+  parentName: string;
+  parentPercent: number;
+  color: string;
+  x: number;
+  y: number;
+  history: HistoryPoint[];
+  loading: boolean;
+  historySource: "home-assistant" | "local";
+  error?: string;
+}
+
+interface TooltipHistoryCacheEntry {
+  expiresAt: number;
+  points: HistoryPoint[];
+  pending?: Promise<HistoryPoint[]>;
+}
 
 @customElement("nexus-energy-card")
 export class NexusEnergyCard extends LitElement {
@@ -25,15 +57,17 @@ export class NexusEnergyCard extends LitElement {
   @state() private _mode: NexusMode = "power";
   @state() private _range: NexusRange = "today";
   @state() private _width = 1180;
-  @state() private _hoveredNodeId?: string;
+  @state() private _tooltip?: TooltipState;
   @state() private _expandedIds = new Set<string>();
   @state() private _collapsedIds = new Set<string>();
 
   private _hass?: HomeAssistantLike;
   private _resizeObserver?: ResizeObserver;
   private _historyCache: HistoryCache = new Map();
+  private _tooltipHistoryCache = new Map<string, TooltipHistoryCacheEntry>();
   private _lastValues = new Map<string, number>();
-  private _touchTimer?: number;
+  private _tooltipTimer?: number;
+  private _tooltipRequestId = 0;
 
   public static async getConfigElement(): Promise<HTMLElement> {
     await import("./nexus-energy-card-editor");
@@ -41,7 +75,14 @@ export class NexusEnergyCard extends LitElement {
   }
 
   public static getStubConfig(): NexusEnergyCardConfig {
-    return DEFAULT_CONFIG;
+    return {
+      ...EMPTY_CONFIG,
+      thresholds: {
+        ...EMPTY_CONFIG.thresholds
+      },
+      sources: [],
+      nodes: []
+    };
   }
 
   public setConfig(config: NexusEnergyCardConfig): void {
@@ -75,7 +116,7 @@ export class NexusEnergyCard extends LitElement {
 
   public override disconnectedCallback(): void {
     this._resizeObserver?.disconnect();
-    window.clearTimeout(this._touchTimer);
+    window.clearTimeout(this._tooltipTimer);
     super.disconnectedCallback();
   }
 
@@ -102,7 +143,12 @@ export class NexusEnergyCard extends LitElement {
       hideZeroNodes: this._config.hide_zero_nodes ?? false
     });
     const primary = layout.primaryRoot;
-    const sourceBalance = this._graph.sourceTotal > 0 ? Math.min(1, this._graph.total / this._graph.sourceTotal) : 0;
+    const solarSources = this._graph.sources.filter((source) => this._isSolarSource(source));
+    const hasSolarSource = solarSources.length > 0;
+    const solarBalance =
+      hasSolarSource && this._graph.total > 0
+        ? Math.min(1, solarSources.reduce((sum, source) => sum + source.value, 0) / this._graph.total)
+        : 0;
 
     return html`
       <ha-card class=${`nexus-shell bg-${this._config.background_style ?? "glass"}`}>
@@ -168,32 +214,19 @@ export class NexusEnergyCard extends LitElement {
               <strong>${formatValue(this._graph.total, this._mode, this._config.precision)}</strong>
               <small><ha-icon icon="mdi:trending-down"></ha-icon> 18% vs ayer 9:00</small>
             </div>
-            <div class="glass-control" aria-label="Zoom visual">
-              <button type="button" title="Centrar mapa"><ha-icon icon="mdi:crosshairs-gps"></ha-icon></button>
-              <span>100%</span>
-              <button type="button" title="Alejar"><ha-icon icon="mdi:minus"></ha-icon></button>
-              <button type="button" title="Acercar"><ha-icon icon="mdi:plus"></ha-icon></button>
-              <button type="button" title="Pantalla completa"><ha-icon icon="mdi:fullscreen"></ha-icon></button>
-            </div>
             <div class="health-pill ${this._graph.overflowNodes.length ? "warning" : ""}">
               <ha-icon icon=${this._graph.overflowNodes.length ? "mdi:alert-circle-outline" : "mdi:shield-check-outline"}></ha-icon>
               ${this._graph.overflowNodes.length ? `${this._graph.overflowNodes.length} overflow` : "Sistema normal"}
             </div>
           </section>
 
-          <section class="graph-stage ${orientation}" style=${`height:${layout.height}px`}>
+          <section class="graph-stage ${orientation}" style=${`height:${layout.height}px`} @click=${this._clearTooltip}>
             ${this._renderSvg(layout)}
             <div class="node-layer">
-              ${layout.nodes.map((node) => this._renderNode(node, primary, sourceBalance))}
+              ${layout.nodes.map((node) => this._renderNode(node, primary, solarBalance, hasSolarSource))}
             </div>
-            ${this._renderTooltip(layout)}
+            ${this._renderTooltip()}
           </section>
-
-          <footer class="bottom-metrics">
-            <div><ha-icon icon="mdi:leaf"></ha-icon><span>CO2 evitado hoy</span><strong>12.4 kg</strong></div>
-            <div><ha-icon icon="mdi:cash-multiple"></ha-icon><span>Ahorro hoy</span><strong>2.18 €</strong></div>
-            <div><ha-icon icon="mdi:thermometer"></ha-icon><span>Temperatura</span><strong>24.1 °C</strong></div>
-          </footer>
         </section>
       </ha-card>
     `;
@@ -256,7 +289,7 @@ export class NexusEnergyCard extends LitElement {
     `;
   }
 
-  private _renderNode(node: PositionedNode, primary: PositionedNode | undefined, sourceBalance: number) {
+  private _renderNode(node: PositionedNode, primary: PositionedNode | undefined, solarBalance: number, hasSolarSource: boolean) {
     const isRoot = primary?.id === node.id;
     const isContainer = node.children.length > 0;
     const isCollapsed = this._collapsedIds.has(node.id);
@@ -275,31 +308,32 @@ export class NexusEnergyCard extends LitElement {
       <article
         class=${classes}
         style=${`left:${node.x}px;top:${node.y}px;width:${node.width}px;height:${node.height}px;--node-accent:${this._nodeAccent(node)};`}
+        data-node-id=${node.id}
         tabindex="0"
-        @mouseenter=${() => this._showTooltip(node)}
-        @focusin=${() => this._showTooltip(node)}
-        @touchstart=${() => this._queueTouchTooltip(node)}
-        @touchend=${this._cancelTouchTooltip}
-        @click=${(event: Event) => this._toggleNode(event, node)}
+        @mouseenter=${() => this._queueTooltip(node)}
+        @mouseleave=${() => this._hideTooltipFromNode(node)}
+        @focusin=${() => this._queueTooltip(node, 0)}
+        @focusout=${() => this._hideTooltipFromNode(node)}
+        @click=${(event: Event) => this._handleNodeClick(event, node)}
       >
-        ${isRoot ? this._renderRootNode(node, sourceBalance) : this._renderCompactNode(node)}
+        ${isRoot ? this._renderRootNode(node, solarBalance, hasSolarSource) : this._renderCompactNode(node)}
       </article>
     `;
   }
 
-  private _renderRootNode(node: PositionedNode, sourceBalance: number) {
+  private _renderRootNode(node: PositionedNode, solarBalance: number, hasSolarSource: boolean) {
     return html`
       <div class="root-heading">
         <span class="node-icon root-icon"><ha-icon icon=${node.icon}></ha-icon></span>
-        <button class="collapse-button" type="button" title="Expandir o colapsar">
+        <button class="collapse-button" type="button" title="Expandir o colapsar" @click=${(event: Event) => this._toggleNode(event, node)}>
           <ha-icon icon=${this._collapsedIds.has(node.id) ? "mdi:chevron-down" : "mdi:chevron-up"}></ha-icon>
         </button>
       </div>
       <div class="root-title">${node.name}</div>
       <div class="root-value">${formatValue(node.value, this._mode, this._config.precision)}</div>
       <div class="root-subtitle">${this._mode === "power" ? "Consumo actual" : "Energía del periodo"}</div>
-      <div class="gauge" style=${`--gauge:${Math.round(sourceBalance * 100)}%`}>
-        <span>${Math.round(sourceBalance * 100)}%</span>
+      <div class=${`gauge ${hasSolarSource ? "" : "is-hidden"}`} style=${`--gauge:${Math.round(solarBalance * 100)}%`}>
+        <span>${Math.round(solarBalance * 100)}%</span>
         <small>Autonomía solar</small>
       </div>
       <dl class="root-stats">
@@ -319,9 +353,9 @@ export class NexusEnergyCard extends LitElement {
           <strong>${node.name}</strong>
           <span>${formatValue(node.value, this._mode, this._config.precision)}</span>
         </div>
-        ${node.children.length
+            ${node.children.length
           ? html`
-              <button class="collapse-button" type="button" title="Expandir o colapsar">
+              <button class="collapse-button" type="button" title="Expandir o colapsar" @click=${(event: Event) => this._toggleNode(event, node)}>
                 <ha-icon icon=${this._collapsedIds.has(node.id) ? "mdi:chevron-down" : "mdi:chevron-up"}></ha-icon>
               </button>
             `
@@ -342,35 +376,35 @@ export class NexusEnergyCard extends LitElement {
     `;
   }
 
-  private _renderTooltip(layout: GraphLayout) {
-    if (!this._hoveredNodeId) {
+  private _renderTooltip() {
+    const tooltip = this._tooltip;
+    if (!tooltip) {
       return nothing;
     }
-
-    const node = layout.nodes.find((item) => item.id === this._hoveredNodeId);
-    if (!node) {
-      return nothing;
-    }
-
-    const center = nodeCenter(node);
-    const tooltipWidth = 252;
-    const x = Math.min(layout.width - tooltipWidth - 18, Math.max(18, center.x + 34));
-    const y = Math.min(layout.height - 198, Math.max(18, center.y - 74));
 
     return html`
-      <aside class="tooltip" style=${`left:${x}px;top:${y}px;width:${tooltipWidth}px;`}>
+      <aside
+        class=${`tooltip ${tooltip.loading ? "is-loading" : ""}`}
+        style=${`left:${tooltip.x}px;top:${tooltip.y}px;width:${TOOLTIP_WIDTH}px;--tooltip-accent:${tooltip.color};`}
+        role="dialog"
+        aria-label=${`Detalle de ${tooltip.name}`}
+      >
         <header>
-          <strong>${node.name}</strong>
-          <span>${formatValue(node.value, this._mode, this._config.precision)}</span>
+          <span class="tooltip-icon"><ha-icon icon=${tooltip.icon}></ha-icon></span>
+          <div>
+            <strong>${tooltip.name}</strong>
+            <span class="tooltip-value">${tooltip.valueLabel}</span>
+          </div>
+          <em>${formatPercent(tooltip.parentPercent)}</em>
         </header>
         <p>
           <span class="dot"></span>
-          ${formatPercent(node.percentOfParent)} ${node.parent ? `de ${node.parent.name}` : "del balance"}
+          ${formatPercent(tooltip.parentPercent)} de ${tooltip.parentName}
         </p>
-        ${this._renderSparkline(node, 216, 58)}
+        ${this._renderTooltipSparkline(tooltip, 216, 58)}
         <footer>
-          <ha-icon icon=${node.overflow ? "mdi:alert-outline" : "mdi:lightbulb-on-outline"}></ha-icon>
-          ${node.overflow ? "Lecturas hijas por encima del total" : this._tooltipHint(node)}
+          <ha-icon icon=${tooltip.error ? "mdi:alert-circle-outline" : tooltip.loading ? "mdi:clock-outline" : "mdi:chart-line"}></ha-icon>
+          ${tooltip.error ?? (tooltip.loading ? "Cargando historial de Home Assistant" : this._tooltipHistoryLabel(tooltip))}
         </footer>
       </aside>
     `;
@@ -378,6 +412,16 @@ export class NexusEnergyCard extends LitElement {
 
   private _renderSparkline(node: PositionedNode, width: number, height: number) {
     const path = sparklinePath(node.history, width, height);
+    return svg`
+      <svg class="sparkline" viewBox=${`0 0 ${width} ${height}`} aria-hidden="true">
+        <path class="sparkline-area" d=${`${path} L ${width} ${height} L 0 ${height} Z`}></path>
+        <path class="sparkline-line" d=${path}></path>
+      </svg>
+    `;
+  }
+
+  private _renderTooltipSparkline(tooltip: TooltipState, width: number, height: number) {
+    const path = sparklinePointPath(tooltip.history, width, height);
     return svg`
       <svg class="sparkline" viewBox=${`0 0 ${width} ${height}`} aria-hidden="true">
         <path class="sparkline-area" d=${`${path} L ${width} ${height} L 0 ${height} Z`}></path>
@@ -436,24 +480,218 @@ export class NexusEnergyCard extends LitElement {
     return node.depth < (this._config.default_expanded_depth ?? 2);
   }
 
-  private _showTooltip(node: PositionedNode): void {
-    this._hoveredNodeId = node.id;
+  private _queueTooltip(node: PositionedNode, delay = TOOLTIP_HOVER_DELAY): void {
+    window.clearTimeout(this._tooltipTimer);
+    this._tooltipTimer = window.setTimeout(() => this._openTooltip(node), delay);
+  }
+
+  private _handleNodeClick(event: Event, node: PositionedNode): void {
+    event.stopPropagation();
+    window.clearTimeout(this._tooltipTimer);
+    if (this._tooltip?.nodeId === node.id) {
+      this._clearTooltip();
+      return;
+    }
+    this._openTooltip(node);
+  }
+
+  private _hideTooltipFromNode(node: PositionedNode): void {
+    window.clearTimeout(this._tooltipTimer);
+    if (this._tooltip?.nodeId === node.id) {
+      this._clearTooltip();
+    }
   }
 
   private _clearTooltip = (): void => {
-    this._hoveredNodeId = undefined;
+    window.clearTimeout(this._tooltipTimer);
+    this._tooltipRequestId += 1;
+    this._tooltip = undefined;
   };
 
-  private _queueTouchTooltip(node: PositionedNode): void {
-    window.clearTimeout(this._touchTimer);
-    this._touchTimer = window.setTimeout(() => {
-      this._hoveredNodeId = node.id;
-    }, 420);
+  private _openTooltip(node: PositionedNode): void {
+    const requestId = ++this._tooltipRequestId;
+    const entityId = node.entity;
+    const fallbackHistory = this._fallbackTooltipHistory(node);
+    const cached = entityId ? this._cachedTooltipHistory(entityId) : undefined;
+    this._tooltip = {
+      nodeId: node.id,
+      entityId,
+      name: node.name,
+      icon: node.icon,
+      valueLabel: this._currentValueLabel(node),
+      parentName: node.parent?.name ?? "Balance",
+      parentPercent: node.parent && node.parent.value > 0 ? node.value / node.parent.value : node.percentOfParent,
+      color: this._nodeAccent(node),
+      ...this._tooltipPosition(node),
+      history: cached ?? fallbackHistory,
+      loading: Boolean(entityId && !cached),
+      historySource: cached ? "home-assistant" : "local"
+    };
+
+    if (entityId && !cached) {
+      void this._loadTooltipHistory(entityId, requestId);
+    }
   }
 
-  private _cancelTouchTooltip = (): void => {
-    window.clearTimeout(this._touchTimer);
-  };
+  private async _loadTooltipHistory(entityId: string, requestId: number): Promise<void> {
+    try {
+      const points = await this._getTooltipHistory(entityId);
+      if (this._tooltipRequestId !== requestId || this._tooltip?.entityId !== entityId) {
+        return;
+      }
+      this._tooltip = {
+        ...this._tooltip,
+        history: points.length ? points : this._tooltip.history,
+        loading: false,
+        historySource: points.length ? "home-assistant" : "local",
+        error: points.length ? undefined : "Sin muestras historicas disponibles"
+      };
+    } catch {
+      if (this._tooltipRequestId !== requestId || this._tooltip?.entityId !== entityId) {
+        return;
+      }
+      this._tooltip = {
+        ...this._tooltip,
+        loading: false,
+        historySource: "local",
+        error: "No se pudo cargar el historial de HA"
+      };
+    }
+  }
+
+  private _cachedTooltipHistory(entityId: string): HistoryPoint[] | undefined {
+    const cached = this._tooltipHistoryCache.get(this._tooltipHistoryKey(entityId));
+    if (!cached || cached.expiresAt <= Date.now()) {
+      return undefined;
+    }
+    return cached.points;
+  }
+
+  private async _getTooltipHistory(entityId: string): Promise<HistoryPoint[]> {
+    const key = this._tooltipHistoryKey(entityId);
+    const cached = this._tooltipHistoryCache.get(key);
+    const now = Date.now();
+    if (cached && cached.expiresAt > now) {
+      return cached.pending ?? cached.points;
+    }
+
+    const pending = this._fetchTooltipHistory(entityId);
+    this._tooltipHistoryCache.set(key, {
+      expiresAt: now + TOOLTIP_CACHE_TTL,
+      points: cached?.points ?? [],
+      pending
+    });
+
+    const points = await pending;
+    this._tooltipHistoryCache.set(key, {
+      expiresAt: Date.now() + TOOLTIP_CACHE_TTL,
+      points
+    });
+    return points;
+  }
+
+  private async _fetchTooltipHistory(entityId: string): Promise<HistoryPoint[]> {
+    const end = new Date();
+    const start = new Date(end.getTime() - (this._mode === "power" ? 60 * 60_000 : 24 * 60 * 60_000));
+
+    if (this._hass?.callWS) {
+      try {
+        const response = await this._hass.callWS<unknown>({
+          type: "history/history_during_period",
+          start_time: start.toISOString(),
+          end_time: end.toISOString(),
+          entity_ids: [entityId],
+          significant_changes_only: false,
+          minimal_response: false,
+          no_attributes: true
+        });
+        const points = parseHistoryResponse(response, entityId);
+        if (points.length) {
+          return points;
+        }
+      } catch {
+        // Fall through to REST-compatible callApi when the websocket history command is unavailable.
+      }
+    }
+
+    if (this._hass?.callApi) {
+      const params = new URLSearchParams({
+        filter_entity_id: entityId,
+        end_time: end.toISOString(),
+        significant_changes_only: "false",
+        minimal_response: "false",
+        no_attributes: "true"
+      });
+      const restPath = `history/period/${encodeURIComponent(start.toISOString())}?${params.toString()}`;
+      const response = await this._hass.callApi<unknown>("GET", restPath);
+      return parseHistoryResponse(response, entityId);
+    }
+
+    return [];
+  }
+
+  private _tooltipHistoryKey(entityId: string): string {
+    return `${this._mode}:${entityId}`;
+  }
+
+  private _fallbackTooltipHistory(node: PositionedNode): HistoryPoint[] {
+    const rangeMs = this._mode === "power" ? 60 * 60_000 : 24 * 60 * 60_000;
+    const now = Date.now();
+    const values = node.history.length ? node.history : [node.value];
+    return values.map((value, index) => ({
+      time: now - rangeMs + (values.length === 1 ? rangeMs : (index / (values.length - 1)) * rangeMs),
+      value
+    }));
+  }
+
+  private _currentValueLabel(node: PositionedNode): string {
+    const state = node.entity ? this._hass?.states[node.entity] : undefined;
+    const raw = Number.parseFloat(String(state?.state ?? "").replace(",", "."));
+    const unit = String(state?.attributes.unit_of_measurement ?? node.unit);
+    if (Number.isFinite(raw)) {
+      return `${formatRawNumber(Math.abs(raw))} ${unit}`.trim();
+    }
+    return formatValue(node.value, this._mode, this._config.precision);
+  }
+
+  private _tooltipPosition(node: PositionedNode): { x: number; y: number } {
+    const stage = this.renderRoot.querySelector<HTMLElement>(".graph-stage");
+    const nodeElement = [...this.renderRoot.querySelectorAll<HTMLElement>(".flow-node")].find((element) => element.dataset.nodeId === node.id);
+    if (!stage || !nodeElement) {
+      return {
+        x: Math.max(12, node.x + node.width + 14),
+        y: Math.max(12, node.y + node.height / 2 - TOOLTIP_HEIGHT / 2)
+      };
+    }
+
+    const stageRect = stage.getBoundingClientRect();
+    const nodeRect = nodeElement.getBoundingClientRect();
+    const gap = 14;
+    const pad = 12;
+    let x = nodeRect.right - stageRect.left + gap;
+    let y = nodeRect.top - stageRect.top + nodeRect.height / 2 - TOOLTIP_HEIGHT / 2;
+
+    if (x + TOOLTIP_WIDTH > stageRect.width - pad) {
+      x = nodeRect.left - stageRect.left - TOOLTIP_WIDTH - gap;
+    }
+
+    if (x < pad) {
+      x = nodeRect.left - stageRect.left + nodeRect.width / 2 - TOOLTIP_WIDTH / 2;
+      y = nodeRect.bottom - stageRect.top + gap;
+      if (y + TOOLTIP_HEIGHT > stageRect.height - pad) {
+        y = nodeRect.top - stageRect.top - TOOLTIP_HEIGHT - gap;
+      }
+    }
+
+    return {
+      x: clampNumber(x, pad, Math.max(pad, stageRect.width - TOOLTIP_WIDTH - pad)),
+      y: clampNumber(y, pad, Math.max(pad, stageRect.height - TOOLTIP_HEIGHT - pad))
+    };
+  }
+
+  private _tooltipHistoryLabel(tooltip: TooltipState): string {
+    return tooltip.historySource === "home-assistant" ? "Historial inmediato desde Home Assistant" : "Historial local hasta recibir datos de HA";
+  }
 
   private _rebuildGraph(force: boolean): void {
     const graph = buildEnergyGraph(this._config, this._hass, this._mode, this._historyCache);
@@ -586,6 +824,17 @@ export class NexusEnergyCard extends LitElement {
     return this._config.base_color ?? "#8bbcff";
   }
 
+  private _isSolarSource(node: Pick<PositionedNode, "id" | "name" | "icon" | "entity">): boolean {
+    const signature = [node.id, node.name, node.icon, node.entity].filter(Boolean).join(" ").toLowerCase();
+    return (
+      signature.includes("solar") ||
+      signature.includes("sun") ||
+      signature.includes("fotovolta") ||
+      signature.includes("photovolta") ||
+      signature.includes("white-balance-sunny")
+    );
+  }
+
   private _thresholdColor(node: PositionedNode): string | undefined {
     const thresholds = [...(this._config.color_thresholds ?? [])].sort((a, b) => b.above - a.above);
     const value = this._mode === "power" ? node.value * 1000 : node.value;
@@ -608,16 +857,6 @@ export class NexusEnergyCard extends LitElement {
       return "Standby";
     }
     return node.role === "source" ? "Aportando" : "Activo";
-  }
-
-  private _tooltipHint(node: PositionedNode): string {
-    if (node.role === "rest") {
-      return "Carga no asignada automáticamente";
-    }
-    if (node.children.length) {
-      return "Pulsa para expandir o colapsar la rama";
-    }
-    return "Historial inmediato calculado en la tarjeta";
   }
 
   static override styles = css`
@@ -663,7 +902,7 @@ export class NexusEnergyCard extends LitElement {
     .nexus-card-frame {
       position: relative;
       min-width: 0;
-      padding: 28px 30px 22px;
+      padding: 24px 30px 18px;
       border-radius: inherit;
       background:
         linear-gradient(90deg, rgba(64, 165, 255, 0.1), transparent 32%, rgba(73, 240, 191, 0.07)),
@@ -683,8 +922,7 @@ export class NexusEnergyCard extends LitElement {
     }
 
     .topbar,
-    .summary-strip,
-    .bottom-metrics {
+    .summary-strip {
       position: relative;
       z-index: 3;
     }
@@ -750,8 +988,7 @@ export class NexusEnergyCard extends LitElement {
     }
 
     .toolbar,
-    .summary-strip,
-    .bottom-metrics {
+    .summary-strip {
       display: flex;
       align-items: center;
       gap: 14px;
@@ -793,8 +1030,7 @@ export class NexusEnergyCard extends LitElement {
 
     .range-select,
     .now-pill,
-    .health-pill,
-    .glass-control {
+    .health-pill {
       display: flex;
       align-items: center;
       min-height: 44px;
@@ -821,7 +1057,7 @@ export class NexusEnergyCard extends LitElement {
 
     .summary-strip {
       justify-content: space-between;
-      margin-bottom: 6px;
+      margin-bottom: 0;
     }
 
     .primary-metric {
@@ -854,28 +1090,6 @@ export class NexusEnergyCard extends LitElement {
       --mdc-icon-size: 15px;
     }
 
-    .glass-control {
-      padding: 0 12px;
-      gap: 10px;
-    }
-
-    .glass-control button {
-      display: grid;
-      width: 30px;
-      height: 30px;
-      place-items: center;
-      border: 0;
-      border-radius: 10px;
-      color: var(--nexus-muted);
-      background: transparent;
-      cursor: pointer;
-    }
-
-    .glass-control button:hover {
-      color: #fff;
-      background: rgba(255, 255, 255, 0.08);
-    }
-
     .health-pill {
       gap: 8px;
       padding: 0 16px;
@@ -891,6 +1105,7 @@ export class NexusEnergyCard extends LitElement {
       position: relative;
       z-index: 2;
       min-height: 520px;
+      margin-top: 2px;
     }
 
     .flow-layer,
@@ -1205,6 +1420,10 @@ export class NexusEnergyCard extends LitElement {
         conic-gradient(from 230deg, var(--nexus-cyan) 0 var(--gauge), rgba(255, 255, 255, 0.14) var(--gauge) 74%, transparent 74%);
     }
 
+    .gauge.is-hidden {
+      display: none;
+    }
+
     .gauge span {
       margin-top: 14px;
       font-size: 29px;
@@ -1255,18 +1474,55 @@ export class NexusEnergyCard extends LitElement {
       box-shadow: 0 22px 42px rgba(0, 0, 0, 0.42);
       backdrop-filter: blur(14px);
       pointer-events: none;
+      --tooltip-accent: var(--nexus-red);
     }
 
     .tooltip header {
       display: flex;
-      justify-content: space-between;
-      gap: 12px;
+      align-items: center;
+      gap: 10px;
       font-size: 14px;
       font-weight: 750;
     }
 
-    .tooltip header span {
-      color: var(--nexus-red);
+    .tooltip-icon {
+      display: grid;
+      flex: 0 0 auto;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border-radius: 10px;
+      color: var(--tooltip-accent);
+      background: color-mix(in srgb, var(--tooltip-accent) 18%, transparent);
+    }
+
+    .tooltip-icon ha-icon {
+      --mdc-icon-size: 19px;
+    }
+
+    .tooltip header div {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .tooltip header strong,
+    .tooltip-value {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tooltip-value,
+    .tooltip header em {
+      color: var(--tooltip-accent);
+      font-style: normal;
+      font-weight: 800;
+    }
+
+    .tooltip-value {
+      margin-top: 4px;
+      font-size: 13px;
     }
 
     .tooltip p {
@@ -1282,7 +1538,7 @@ export class NexusEnergyCard extends LitElement {
       width: 7px;
       height: 7px;
       border-radius: 999px;
-      background: var(--nexus-red);
+      background: var(--tooltip-accent);
     }
 
     .tooltip .sparkline {
@@ -1292,11 +1548,13 @@ export class NexusEnergyCard extends LitElement {
     }
 
     .tooltip .sparkline-line {
-      stroke: var(--nexus-red);
+      stroke: var(--tooltip-accent);
+      stroke-width: 2.4;
     }
 
     .tooltip .sparkline-area {
-      fill: rgba(255, 98, 89, 0.12);
+      fill: var(--tooltip-accent);
+      fill-opacity: 0.13;
     }
 
     .tooltip footer {
@@ -1311,39 +1569,13 @@ export class NexusEnergyCard extends LitElement {
       --mdc-icon-size: 16px;
     }
 
-    .bottom-metrics {
-      justify-content: space-between;
-      margin-top: 14px;
-    }
-
-    .bottom-metrics div {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      min-height: 52px;
-      padding: 0 16px;
-      border: 1px solid var(--nexus-line);
-      border-radius: 12px;
-      background: rgba(21, 36, 54, 0.58);
-      color: var(--nexus-muted);
-    }
-
-    .bottom-metrics ha-icon {
-      color: var(--nexus-yellow);
-    }
-
-    .bottom-metrics strong {
-      color: var(--nexus-green);
-    }
-
     @media (max-width: 767px) {
       .nexus-card-frame {
-        padding: 18px 14px;
+        padding: 16px 14px 12px;
       }
 
       .topbar,
-      .summary-strip,
-      .bottom-metrics {
+      .summary-strip {
         align-items: stretch;
         flex-direction: column;
       }
@@ -1359,10 +1591,6 @@ export class NexusEnergyCard extends LitElement {
 
       .primary-metric strong {
         font-size: 38px;
-      }
-
-      .glass-control {
-        display: none;
       }
 
       .flow-node.role-source {
@@ -1418,6 +1646,104 @@ function sparklinePath(values: number[], width: number, height: number): string 
   });
 
   return points.join(" ");
+}
+
+function sparklinePointPath(points: HistoryPoint[], width: number, height: number): string {
+  if (points.length === 0) {
+    return `M 0 ${height / 2} L ${width} ${height / 2}`;
+  }
+
+  const sorted = [...points].sort((a, b) => a.time - b.time);
+  const values = sorted.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const spread = Math.max(0.001, max - min);
+  const start = sorted[0]?.time ?? 0;
+  const end = sorted.at(-1)?.time ?? start;
+  const timeSpread = Math.max(1, end - start);
+  return sorted
+    .map((point, index) => {
+      const x = ((point.time - start) / timeSpread) * width;
+      const y = height - ((point.value - min) / spread) * (height - 8) - 4;
+      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(" ");
+}
+
+function parseHistoryResponse(response: unknown, entityId: string): HistoryPoint[] {
+  const groups = historyGroups(response);
+  const selected =
+    groups.find((group) =>
+      group.some((entry) => {
+        const item = entry as Record<string, unknown>;
+        return item.entity_id === entityId;
+      })
+    ) ??
+    groups[0] ??
+    [];
+
+  return selected
+    .map((entry, index) => historyEntryToPoint(entry, index, selected.length))
+    .filter((point): point is HistoryPoint => Boolean(point))
+    .sort((a, b) => a.time - b.time);
+}
+
+function historyGroups(response: unknown): unknown[][] {
+  if (!Array.isArray(response)) {
+    return [];
+  }
+
+  if (response.every(Array.isArray)) {
+    return response as unknown[][];
+  }
+
+  return [response];
+}
+
+function historyEntryToPoint(entry: unknown, index: number, total: number): HistoryPoint | undefined {
+  if (!entry || typeof entry !== "object") {
+    return undefined;
+  }
+
+  const item = entry as Record<string, unknown>;
+  const state = item.state ?? item.s;
+  const value = Number.parseFloat(String(state ?? "").replace(",", "."));
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+
+  const parsedTime = parseHistoryTime(item.last_changed ?? item.last_updated ?? item.lc ?? item.lu);
+  const time = parsedTime ?? Date.now() - Math.max(0, total - index - 1) * 60_000;
+  return { time, value: Math.abs(value) };
+}
+
+function parseHistoryTime(value: unknown): number | undefined {
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value > 1_000_000_000_000 ? value : value * 1000;
+  }
+
+  return undefined;
+}
+
+function formatRawNumber(value: number): string {
+  if (value >= 100 || Number.isInteger(value)) {
+    return Math.round(value).toString();
+  }
+
+  if (value >= 10) {
+    return trimTrailingZero(value.toFixed(1));
+  }
+
+  return trimTrailingZero(value.toFixed(2));
+}
+
+function trimTrailingZero(value: string): string {
+  return value.replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
 }
 
 function clampNumber(value: number, min: number, max: number): number {

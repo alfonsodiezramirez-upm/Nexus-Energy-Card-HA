@@ -2,7 +2,7 @@
 
 Reference visual: Product Design ImageGen option 1, "Glass Grid".
 
-Prototype: http://127.0.0.1:5173/
+Prototype: http://127.0.0.1:5174/
 
 ## Captures
 
@@ -14,12 +14,18 @@ Prototype: http://127.0.0.1:5173/
 - Laminar routing mobile: `design-qa-screenshots/mobile-laminar.png` at 390 x 844.
 - Volume routing desktop: `design-qa-screenshots/desktop-volume.png` at 1440 x 1024.
 - Volume routing mobile: `design-qa-screenshots/mobile-volume.png` at 390 x 844.
-- Editor desktop: `design-qa-screenshots/editor-desktop.png` at 1120 x 1400.
+- Clean layout desktop: `design-qa-screenshots/desktop-clean.png` at 1440 x 1024.
+- Clean layout mobile: `design-qa-screenshots/mobile-clean.png` at 390 x 844.
+- Editor zero-state desktop: `design-qa-screenshots/editor-zero-desktop.png` at 1120 x 1100.
 - Editor mobile: `design-qa-screenshots/editor-mobile.png` at 390 x 844.
+- Editor accordion desktop: `design-qa-screenshots/editor-accordion-desktop.png` at 1120 x 1400.
+- Tooltip desktop: `design-qa-screenshots/tooltip-desktop.png` at 1440 x 1024.
+- Tooltip mobile: `design-qa-screenshots/tooltip-mobile.png` at 390 x 844.
 
 ## Checks
 
-- Visual structure: passed. The implementation follows the selected dark glassmorphic energy-map direction with left sources, central home hub, right-side hierarchy, curved glowing flows, segmented mode control, live metric, diagnostic pill, and bottom summary metrics.
+- Visual structure: passed. The implementation follows the selected dark glassmorphic energy-map direction with left sources, central home hub, right-side hierarchy, curved glowing flows, segmented mode control, live metric, and diagnostic pill.
+- Production cleanup: passed. Mockup-only zoom controls and static bottom KPIs were removed from the rendered card, leaving the graph stage as the dominant content region.
 - Runtime render: passed. The card renders nonblank in Chrome headless after Lit hydration.
 - Desktop layout: passed. No clipped root content; visible nodes retain readable text and stable rounded glass surfaces.
 - Mobile layout: passed. The layout switches to vertical flow, sources stack in a single column, and horizontal clipping is avoided.
@@ -30,9 +36,13 @@ Prototype: http://127.0.0.1:5173/
 - Dynamic flow volume: passed. Power-mode SVG paths now map live values to proportional `stroke-width`, with residual paths at 2 px and the largest visible flow at 10 px; the browser QA check found 13 distinct widths across 15 paths.
 - Balanced horizontal rhythm: passed. The source column, `Casa`, and the first hierarchy column now keep symmetric left/right gaps, with tests guarding a minimum 52 px desktop spacing.
 - Left-column rhythm: passed. Source cards use the same 16 px vertical cadence as right-side sibling device groups.
-- Visual editor structure: passed. The editor now exposes general settings, main home entity, parent-child node builder, appearance controls, animation controls, zero-node cleanup, and color thresholds in separated dense panels.
-- Editor parent routing: passed. Existing hierarchy rows preserve the correct parent selection, including `Planta Baja` under `Casa`, while source rows remain anchored to `Raiz/Fuente`.
-- Editor interactions: passed. CDP editor smoke test verified add-node, add-threshold, correct parent select value, and `config-changed` emission.
+- Visual editor structure: passed. The editor exposes general settings, main home entity, parent-child node builder, appearance controls, animation controls, zero-node cleanup, and color thresholds in separated dense panels without horizontal scrolling.
+- Editor zero-state: passed. New editor configs start with `nodes: []` and `sources: []`; the builder initially shows only the large `Anadir Primer Nodo` action.
+- Editor accordion: passed. Node rows render as compact summaries by default, expand into a one-column form, and keep only one form open at a time.
+- Editor interactions: passed. CDP editor smoke test verified zero-state startup, first-node creation, source creation, one-column node fields, one-column threshold fields, no horizontal overflow, add-threshold, and `config-changed` emission.
+- Tooltip data: passed. Desktop CDP check verified debounced hover, raw current entity value, parent percentage text, 44 Home Assistant history samples, SVG path rendering, 60 second cache reuse with no second history call, and background close.
+- Tooltip mobile interaction: passed. Mobile CDP check verified tap-to-open, tap-same-node-to-close, tap-other-node-to-switch, and tap-background-to-close behavior.
+- Tooltip positioning: passed. Desktop tooltip stayed inside the graph stage when opened from the right-side hierarchy; mobile tooltip remained inside the card viewport.
 - Geometric parent centering: passed. Parent center Y is computed from the average center Y of its first and last visible child, including root-level `Casa` and nested parents.
 - Interactions: passed. CDP smoke test verified Energy mode toggle, Cocina branch expansion, and hover tooltip display.
 - Data logic: passed. Unit tests cover automatic rest node calculation, overflow clamping/logging, reverse flow direction for negative bidirectional values, strict columns, parent centering, source and parent slot distribution, dynamic flow widths, balanced gaps, and cubic path control points.
@@ -55,5 +65,9 @@ Prototype: http://127.0.0.1:5173/
 - Rebuilt the Lovelace visual editor around the novice workflow: choose the house sensor, add nodes, choose each parent, and let the card build the nested config.
 - Added runtime support for editor-controlled options: time selector visibility, base line width, animation speed, background style, zero-node hiding, inverted polarity, base flow color, and per-node color thresholds.
 - Added a local editor demo route at `/?editor=1` plus CDP editor QA coverage.
+- Removed non-functional zoom controls and static footer KPIs from the card UI, then tightened top/bottom padding around the graph.
+- Split the editor startup config from the demo config so Home Assistant no longer injects mock entities into new cards.
+- Reworked the node builder into a vertical accordion with full-width fields and strict overflow-x containment.
+- Added Home Assistant history-backed node tooltips with a 250 ms hover debounce, 60 second cache, mobile click toggling, dynamic bounds-aware placement, and native SVG sparklines.
 
 final result: passed

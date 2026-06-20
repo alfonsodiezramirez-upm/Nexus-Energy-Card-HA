@@ -7,34 +7,29 @@ import {
   mdiBedKingOutline,
   mdiBedOutline,
   mdiCalendarMonthOutline,
-  mdiCashMultiple,
+  mdiChartLine,
   mdiChevronDown,
   mdiChevronUp,
   mdiClockOutline,
-  mdiCrosshairsGps,
   mdiDotsHorizontal,
   mdiEngine,
   mdiFlash,
-  mdiFullscreen,
   mdiHomeOutline,
-  mdiLeaf,
   mdiLightbulbOnOutline,
   mdiLightningBoltOutline,
-  mdiMinus,
   mdiOfficeBuildingMarkerOutline,
-  mdiPlus,
+  mdiPowerPlugOutline,
   mdiPotSteamOutline,
   mdiShieldCheckOutline,
   mdiSofaOutline,
   mdiStove,
-  mdiThermometer,
   mdiToilet,
   mdiTransmissionTower,
   mdiTrendingDown,
   mdiTrashCanOutline
 } from "@mdi/js";
 import "../src/index";
-import { DEFAULT_CONFIG } from "../src/default-config";
+import { DEFAULT_CONFIG, EMPTY_CONFIG } from "../src/default-config";
 import type { HomeAssistantLike } from "../src/types";
 
 const ICONS = new Map<string, string>([
@@ -44,27 +39,22 @@ const ICONS = new Map<string, string>([
   ["mdi:bed-king-outline", mdiBedKingOutline],
   ["mdi:bed-outline", mdiBedOutline],
   ["mdi:calendar-month-outline", mdiCalendarMonthOutline],
-  ["mdi:cash-multiple", mdiCashMultiple],
+  ["mdi:chart-line", mdiChartLine],
   ["mdi:chevron-down", mdiChevronDown],
   ["mdi:chevron-up", mdiChevronUp],
   ["mdi:clock-outline", mdiClockOutline],
-  ["mdi:crosshairs-gps", mdiCrosshairsGps],
   ["mdi:dots-horizontal", mdiDotsHorizontal],
   ["mdi:engine", mdiEngine],
   ["mdi:flash", mdiFlash],
-  ["mdi:fullscreen", mdiFullscreen],
   ["mdi:home-outline", mdiHomeOutline],
-  ["mdi:leaf", mdiLeaf],
   ["mdi:lightbulb-on-outline", mdiLightbulbOnOutline],
   ["mdi:lightning-bolt-outline", mdiLightningBoltOutline],
-  ["mdi:minus", mdiMinus],
   ["mdi:office-building-marker-outline", mdiOfficeBuildingMarkerOutline],
-  ["mdi:plus", mdiPlus],
+  ["mdi:power-plug-outline", mdiPowerPlugOutline],
   ["mdi:pot-steam-outline", mdiPotSteamOutline],
   ["mdi:shield-check-outline", mdiShieldCheckOutline],
   ["mdi:sofa-outline", mdiSofaOutline],
   ["mdi:stove", mdiStove],
-  ["mdi:thermometer", mdiThermometer],
   ["mdi:toilet", mdiToilet],
   ["mdi:transmission-tower", mdiTransmissionTower],
   ["mdi:trending-down", mdiTrendingDown],
@@ -119,6 +109,8 @@ customElements.define("ha-icon", HaIconStub);
 @customElement("nexus-demo-app")
 export class NexusDemoApp extends LitElement {
   @state() private _hass = createHass(0);
+  private _cardConfigured = false;
+  private _editorConfigured = false;
   private _timer?: number;
 
   protected override firstUpdated(): void {
@@ -141,13 +133,19 @@ export class NexusDemoApp extends LitElement {
 
   private _syncChild(): void {
     const card = this.renderRoot.querySelector("nexus-energy-card");
-    card?.setConfig(DEFAULT_CONFIG);
+    if (card && !this._cardConfigured) {
+      card.setConfig(DEFAULT_CONFIG);
+      this._cardConfigured = true;
+    }
     if (card) {
       card.hass = this._hass;
     }
 
     const editor = this.renderRoot.querySelector("nexus-energy-card-editor");
-    editor?.setConfig(DEFAULT_CONFIG);
+    if (editor && !this._editorConfigured) {
+      editor.setConfig(new URLSearchParams(window.location.search).has("demo") ? DEFAULT_CONFIG : EMPTY_CONFIG);
+      this._editorConfigured = true;
+    }
     if (editor) {
       editor.hass = this._hass;
     }
@@ -225,5 +223,39 @@ function createHass(tick: number): HomeAssistantLike {
     };
   }
 
-  return { states };
+  const callWS: HomeAssistantLike["callWS"] = async <T,>(message: Record<string, unknown>): Promise<T> => {
+    if (message.type !== "history/history_during_period") {
+      return [] as T;
+    }
+
+    const requestedIds = Array.isArray(message.entity_ids)
+      ? message.entity_ids.filter((entityId): entityId is string => typeof entityId === "string")
+      : typeof message.entity_id === "string"
+        ? [message.entity_id]
+        : [];
+    const start = Date.parse(String(message.start_time ?? "")) || Date.now() - 60 * 60_000;
+    const end = Date.parse(String(message.end_time ?? "")) || Date.now();
+    const sampleCount = 44;
+    const history = requestedIds.map((entityId) => {
+      const key = entityId.replace(/^sensor\./, "");
+      const base = Number(values[key as keyof typeof values] ?? states[entityId]?.state ?? 0);
+      const isEnergy = key.includes("energy");
+      return Array.from({ length: sampleCount }, (_, index) => {
+        const progress = index / (sampleCount - 1);
+        const time = new Date(start + (end - start) * progress);
+        const wave = Math.sin(index / 2.8 + key.length) * (isEnergy ? 0.035 : 0.16);
+        const spike = index % 17 === 0 ? (isEnergy ? 0.08 : 0.34) : 0;
+        const value = Math.max(0, base * (1 + wave + spike));
+        return {
+          entity_id: entityId,
+          state: value.toFixed(isEnergy ? 2 : 0),
+          last_changed: time.toISOString(),
+          last_updated: time.toISOString()
+        };
+      });
+    });
+    return history as T;
+  };
+
+  return { states, callWS };
 }

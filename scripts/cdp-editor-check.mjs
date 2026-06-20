@@ -1,5 +1,5 @@
 const endpoint = process.argv[2] ?? "http://127.0.0.1:9225";
-const targetUrl = process.argv[3] ?? "http://127.0.0.1:5173/?editor=1";
+const targetUrl = process.argv[3] ?? "http://127.0.0.1:5174/?editor=1";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -71,24 +71,59 @@ const result = await send("Runtime.evaluate", {
       const changes = [];
       editor.addEventListener('config-changed', (event) => changes.push(event.detail.config));
 
-      const rows = [...root.querySelectorAll('.node-row')];
-      const groundFloor = rows.find((row) => row.querySelector('.row-title strong')?.textContent.trim() === 'Planta Baja');
-      const groundParentValue = groundFloor?.querySelector('select')?.value;
+      const initialRows = root.querySelectorAll('.node-row').length;
+      const initialNodes = editor._config?.nodes?.length ?? -1;
+      const initialSources = editor._config?.sources?.length ?? -1;
+      const zeroButton = [...root.querySelectorAll('button')].find((button) => button.textContent.trim().includes('Anadir Primer Nodo'));
 
-      [...root.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Nodo')?.click();
+      zeroButton?.click();
       await editor.updateComplete;
-      const addedNode = root.textContent.includes('Nuevo nodo');
+      const rowsAfterFirstAdd = root.querySelectorAll('.node-row').length;
+      const expandedAfterFirstAdd = root.querySelectorAll('.node-form').length;
+      const nodeGrid = root.querySelector('.node-grid');
+      const nodeGridColumns = nodeGrid ? getComputedStyle(nodeGrid).gridTemplateColumns.split(' ').filter(Boolean).length : 0;
+      const editorShell = root.querySelector('.editor');
+      const noHorizontalOverflowAfterFirstAdd = editorShell.scrollWidth <= editorShell.clientWidth + 1;
+
+      [...root.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Fuente')?.click();
+      await editor.updateComplete;
+      const rowsAfterSourceAdd = root.querySelectorAll('.node-row').length;
+      const expandedAfterSourceAdd = root.querySelectorAll('.node-form').length;
 
       [...root.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Anadir umbral')?.click();
       await editor.updateComplete;
       const addedThreshold = Boolean(root.querySelector('.threshold-row'));
+      const thresholdColumns = getComputedStyle(root.querySelector('.threshold-row')).gridTemplateColumns.split(' ').filter(Boolean).length;
 
       const latest = changes.at(-1);
       return {
-        ok: groundParentValue === 'home' && addedNode && addedThreshold && changes.length >= 2 && latest?.color_thresholds?.length >= 1,
-        groundParentValue,
-        addedNode,
+        ok:
+          initialRows === 0 &&
+          initialNodes === 0 &&
+          initialSources === 0 &&
+          Boolean(zeroButton) &&
+          rowsAfterFirstAdd === 1 &&
+          expandedAfterFirstAdd === 1 &&
+          nodeGridColumns === 1 &&
+          noHorizontalOverflowAfterFirstAdd &&
+          rowsAfterSourceAdd === 2 &&
+          expandedAfterSourceAdd === 1 &&
+          addedThreshold &&
+          thresholdColumns === 1 &&
+          changes.length >= 3 &&
+          latest?.color_thresholds?.length >= 1,
+        initialRows,
+        initialNodes,
+        initialSources,
+        hasZeroButton: Boolean(zeroButton),
+        rowsAfterFirstAdd,
+        expandedAfterFirstAdd,
+        nodeGridColumns,
+        noHorizontalOverflowAfterFirstAdd,
+        rowsAfterSourceAdd,
+        expandedAfterSourceAdd,
         addedThreshold,
+        thresholdColumns,
         changeCount: changes.length,
         hasThresholdConfig: latest?.color_thresholds?.length >= 1
       };

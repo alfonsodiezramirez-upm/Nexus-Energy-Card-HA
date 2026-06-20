@@ -19,7 +19,7 @@ Nexus Energy Card is a Home Assistant Lovelace dashboard card for visualizing a 
 - Optional zero-value node hiding.
 - Per-node or global color thresholds.
 - Hover/tap tooltip with current value, parent share, and Home Assistant history sparkline.
-- Responsive desktop/mobile layout.
+- Container-aware responsive layout with a compact vertical SVG routing mode below 600 px.
 - Shadow DOM styling with glass, transparent, and solid background modes.
 
 ![Nexus Energy Card editor](images/nexus-energy-card-editor.png)

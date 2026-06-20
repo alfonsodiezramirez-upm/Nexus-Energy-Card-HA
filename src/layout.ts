@@ -28,9 +28,17 @@ const HORIZONTAL_COLUMN_GAP = 52;
 const HORIZONTAL_SIBLING_GAP = 16;
 const HORIZONTAL_GROUP_GAP = 32;
 const HORIZONTAL_SOURCE_GAP = HORIZONTAL_SIBLING_GAP;
+const COMPACT_OUTER_PADDING = 16;
+const COMPACT_GRID_GAP = 8;
+const COMPACT_SECTION_GAP = 34;
+const COMPACT_NODE_MIN_WIDTH = 140;
+const COMPACT_NODE_HEIGHT = 64;
+const COMPACT_SOURCE_HEIGHT = 68;
+const COMPACT_ROOT_MAX_WIDTH = 300;
+const COMPACT_ROOT_HEIGHT = 300;
 
 export function layoutGraph(graph: GraphBuildResult, options: LayoutOptions): GraphLayout {
-  const width = Math.max(360, options.width);
+  const width = Math.max(280, options.width);
   const height = Math.max(520, options.height);
   const sourceNodes = layoutSources(graph.sources, width, height, options.orientation, options.hideZeroNodes ?? false);
   const primaryRoot = graph.primaryRoot;
@@ -49,7 +57,7 @@ export function layoutGraph(graph: GraphBuildResult, options: LayoutOptions): Gr
   if (options.orientation === "vertical") {
     const positionedTree = positionVerticalHierarchy(primaryRoot, width, sourceNodes, options);
     const primary = positionedTree.find((node) => node.id === primaryRoot.id);
-    const edges = buildEdges(sourceNodes, positionedTree, primary);
+    const edges = buildEdges(sourceNodes, positionedTree, primary, options.orientation);
 
     return {
       orientation: options.orientation,
@@ -64,7 +72,7 @@ export function layoutGraph(graph: GraphBuildResult, options: LayoutOptions): Gr
 
   const positionedTree = positionHorizontalHierarchy(primaryRoot, width, height, sourceNodes, options);
   const primary = positionedTree.find((node) => node.id === primaryRoot.id);
-  const edges = buildEdges(sourceNodes, positionedTree, primary);
+  const edges = buildEdges(sourceNodes, positionedTree, primary, options.orientation);
 
   return {
     orientation: options.orientation,
@@ -156,13 +164,15 @@ function layoutSources(
   }
 
   const gap = 10;
-  const columns = width < 520 ? 1 : Math.min(4, Math.max(2, visibleSources.length));
-  const nodeWidth = Math.min(300, Math.floor((width - 32 - gap * (columns - 1)) / columns));
-  const nodeHeight = 82;
+  const availableWidth = Math.max(COMPACT_NODE_MIN_WIDTH, width - COMPACT_OUTER_PADDING * 2);
+  const columns =
+    availableWidth >= COMPACT_NODE_MIN_WIDTH * 2 + gap ? Math.min(2, Math.max(1, visibleSources.length)) : 1;
+  const nodeWidth = Math.floor((availableWidth - gap * (columns - 1)) / columns);
+  const nodeHeight = COMPACT_SOURCE_HEIGHT;
   return visibleSources.map((node, index) => ({
     ...node,
-    x: columns === 1 ? (width - nodeWidth) / 2 : 16 + (index % columns) * (nodeWidth + gap),
-    y: 92 + Math.floor(index / columns) * (nodeHeight + gap),
+    x: columns === 1 ? (width - nodeWidth) / 2 : COMPACT_OUTER_PADDING + (index % columns) * (nodeWidth + gap),
+    y: 20 + Math.floor(index / columns) * (nodeHeight + gap),
     width: nodeWidth,
     height: nodeHeight,
     depth: 0,
@@ -177,10 +187,10 @@ function positionVerticalHierarchy(
   options: LayoutOptions
 ): PositionedNode[] {
   const nodes: PositionedNode[] = [];
-  const rows = Math.max(1, Math.ceil(sourceNodes.length / (width < 520 ? 1 : Math.min(4, sourceNodes.length))));
-  let cursorY = 92 + rows * 92 + 34;
-  const rootWidth = Math.min(280, width - 32);
-  const rootHeight = 318;
+  const sourceBottom = sourceNodes.length ? Math.max(...sourceNodes.map((source) => source.y + source.height)) : 20;
+  let cursorY = sourceBottom + COMPACT_SECTION_GAP;
+  const rootWidth = Math.min(COMPACT_ROOT_MAX_WIDTH, width - COMPACT_OUTER_PADDING * 2);
+  const rootHeight = COMPACT_ROOT_HEIGHT;
   const rootNode: PositionedNode = {
     ...root,
     x: (width - rootWidth) / 2,
@@ -191,34 +201,60 @@ function positionVerticalHierarchy(
     visibleChildren: []
   };
   nodes.push(rootNode);
-  cursorY += rootHeight + 26;
+  cursorY += rootHeight + COMPACT_SECTION_GAP;
 
-  const visit = (source: GraphNode, parent: PositionedNode, depth: number) => {
-    if (!isExpanded(source, options.expandedIds, options.collapsedIds, options.defaultExpandedDepth)) {
-      return;
-    }
+  placeCompactChildren(root, rootNode, cursorY, 1, width, options, nodes);
+  return nodes;
+}
 
-    for (const child of source.children) {
-      const indent = Math.min(42, depth * 16);
-      const childWidth = Math.max(220, width - 32 - indent);
+function placeCompactChildren(
+  source: GraphNode,
+  parent: PositionedNode,
+  top: number,
+  depth: number,
+  width: number,
+  options: LayoutOptions,
+  nodes: PositionedNode[]
+): number {
+  const children = visibleChildren(source, options);
+  if (children.length === 0) {
+    return top;
+  }
+
+  const indent = Math.min(20, Math.max(0, depth - 1) * 8);
+  const availableWidth = Math.max(COMPACT_NODE_MIN_WIDTH, width - COMPACT_OUTER_PADDING * 2 - indent * 2);
+  const columns = availableWidth >= COMPACT_NODE_MIN_WIDTH * 2 + COMPACT_GRID_GAP ? 2 : 1;
+  const nodeWidth = Math.floor((availableWidth - COMPACT_GRID_GAP * (columns - 1)) / columns);
+  const left = (width - (nodeWidth * columns + COMPACT_GRID_GAP * (columns - 1))) / 2;
+  let cursorY = top;
+
+  for (let index = 0; index < children.length; index += columns) {
+    const rowChildren = children.slice(index, index + columns);
+    const positionedRow = rowChildren.map((child, rowIndex) => {
       const childNode: PositionedNode = {
         ...child,
-        x: 16 + indent,
+        x: left + rowIndex * (nodeWidth + COMPACT_GRID_GAP),
         y: cursorY,
-        width: childWidth,
-        height: 72,
+        width: nodeWidth,
+        height: COMPACT_NODE_HEIGHT,
         depth,
         visibleChildren: []
       };
       nodes.push(childNode);
       parent.visibleChildren.push(childNode);
-      cursorY += childNode.height + 12;
-      visit(child, childNode, depth + 1);
-    }
-  };
+      return { source: child, node: childNode };
+    });
 
-  visit(root, rootNode, 1);
-  return nodes;
+    cursorY += COMPACT_NODE_HEIGHT + COMPACT_GRID_GAP;
+
+    for (const child of positionedRow) {
+      if (isExpanded(child.source, options.expandedIds, options.collapsedIds, options.defaultExpandedDepth)) {
+        cursorY = placeCompactChildren(child.source, child.node, cursorY + COMPACT_GRID_GAP, depth + 1, width, options, nodes);
+      }
+    }
+  }
+
+  return cursorY;
 }
 
 interface LayoutTree {
@@ -347,11 +383,12 @@ function clamp(value: number, min: number, max: number): number {
 function buildEdges(
   sourceNodes: PositionedNode[],
   positionedTree: PositionedNode[],
-  primary: PositionedNode | undefined
+  primary: PositionedNode | undefined,
+  orientation: NexusOrientation
 ): PositionedEdge[] {
   const edges: PositionedEdge[] = [];
   if (primary) {
-    const sortedSources = [...sourceNodes].sort((a, b) => nodeCenter(a).y - nodeCenter(b).y);
+    const sortedSources = sortForSlots(sourceNodes, orientation);
     for (const [index, source] of sortedSources.entries()) {
       edges.push({
         id: `${source.id}->${primary.id}`,
@@ -370,7 +407,7 @@ function buildEdges(
   }
 
   for (const node of positionedTree) {
-    const sortedChildren = [...node.visibleChildren].sort((a, b) => nodeCenter(a).y - nodeCenter(b).y);
+    const sortedChildren = sortForSlots(node.visibleChildren, orientation);
     for (const [index, child] of sortedChildren.entries()) {
       edges.push({
         id: `${node.id}->${child.id}`,
@@ -389,6 +426,18 @@ function buildEdges(
   }
 
   return edges;
+}
+
+function sortForSlots(nodes: PositionedNode[], orientation: NexusOrientation): PositionedNode[] {
+  return [...nodes].sort((a, b) => {
+    const centerA = nodeCenter(a);
+    const centerB = nodeCenter(b);
+    if (orientation === "horizontal") {
+      return centerA.y - centerB.y || centerA.x - centerB.x;
+    }
+
+    return centerA.x - centerB.x || centerA.y - centerB.y;
+  });
 }
 
 function anchor(

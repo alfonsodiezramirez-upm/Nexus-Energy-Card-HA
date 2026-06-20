@@ -136,6 +136,63 @@ describe("layoutGraph", () => {
     expect(layout.edges.some((edge) => edge.from.id === "grid")).toBe(false);
     expect(layout.edges.some((edge) => edge.from.id === "generator")).toBe(false);
   });
+
+  it("stacks sources, home, and children in compact vertical mode", () => {
+    const layout = fixtureCompactLayout();
+    const home = getNode(layout.nodes, "home");
+    const firstSource = getNode(layout.sources, "solar");
+    const firstChild = home.visibleChildren[0];
+
+    expect(layout.orientation).toBe("vertical");
+    expect(firstSource.y + firstSource.height).toBeLessThan(home.y);
+    expect(home.y + home.height).toBeLessThan(firstChild.y);
+    expect(home.width).toBeLessThanOrEqual(300);
+
+    for (const node of layout.nodes) {
+      expect(node.x).toBeGreaterThanOrEqual(0);
+      expect(node.x + node.width).toBeLessThanOrEqual(layout.width);
+    }
+  });
+
+  it("uses a two-column compact child grid when the card width allows it", () => {
+    const layout = fixtureCompactLayout();
+    const home = getNode(layout.nodes, "home");
+    const [first, second, third] = home.visibleChildren;
+
+    expect(home.visibleChildren.length).toBeGreaterThanOrEqual(3);
+    expect(first.y).toBe(second.y);
+    expect(first.x).toBeLessThan(second.x);
+    expect(third.y).toBeGreaterThan(first.y);
+    expect(first.width).toBeGreaterThanOrEqual(140);
+    expect(first.width).toBe(second.width);
+  });
+
+  it("emits vertical Bezier tangents in compact mode", () => {
+    const layout = fixtureCompactLayout();
+    const edge = layout.edges.find((item) => item.from.id === "home" && item.to.id === "ground-floor");
+    expect(edge).toBeDefined();
+
+    const numbers = parsePath(edgePath(edge!, "vertical"));
+    const [x1, y1, c1x, c1y, c2x, c2y, x2, y2] = numbers;
+    const offset = (y2 - y1) / 2;
+
+    expect(c1x).toBe(x1);
+    expect(c1y).toBeCloseTo(y1 + offset, 5);
+    expect(c2x).toBe(x2);
+    expect(c2y).toBeCloseTo(y2 - offset, 5);
+  });
+
+  it("spreads compact parent output anchors along the bottom edge", () => {
+    const layout = fixtureCompactLayout();
+    const home = getNode(layout.nodes, "home");
+    const outgoing = layout.edges.filter((edge) => edge.from.id === "home");
+    const startXs = outgoing.map((edge) => parsePath(edgePath(edge, "vertical"))[0]);
+
+    expect(outgoing.length).toBeGreaterThanOrEqual(3);
+    expect(startXs).toEqual([...startXs].sort((a, b) => a - b));
+    expect(startXs[0]).toBeCloseTo(home.x + home.width / (outgoing.length + 1), 5);
+    expect(startXs.at(-1)).toBeCloseTo(home.x + (home.width * outgoing.length) / (outgoing.length + 1), 5);
+  });
 });
 
 function fixtureLayout() {
@@ -144,6 +201,18 @@ function fixtureLayout() {
     width: 1380,
     height: 720,
     orientation: "horizontal",
+    expandedIds: new Set(),
+    collapsedIds: new Set(),
+    defaultExpandedDepth: 2
+  });
+}
+
+function fixtureCompactLayout() {
+  const graph = buildEnergyGraph(fixtureConfig(), fixtureHass(), "power");
+  return layoutGraph(graph, {
+    width: 360,
+    height: 520,
+    orientation: "vertical",
     expandedIds: new Set(),
     collapsedIds: new Set(),
     defaultExpandedDepth: 2

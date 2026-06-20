@@ -28,9 +28,10 @@ Prototype: http://127.0.0.1:5174/
 - Production cleanup: passed. Mockup-only zoom controls and static bottom KPIs were removed from the rendered card, leaving the graph stage as the dominant content region.
 - Runtime render: passed. The card renders nonblank in Chrome headless after Lit hydration.
 - Desktop layout: passed. No clipped root content; visible nodes retain readable text and stable rounded glass surfaces.
-- Mobile layout: passed. The layout switches to vertical flow, sources stack in a single column, and horizontal clipping is avoided.
+- Mobile layout: passed. The layout switches from a ResizeObserver-measured container breakpoint at 600 px, uses vertical flow routing, stacks sources above the home node, and places child consumers in a compact one/two-column grid without horizontal clipping.
 - Strict column layout: passed. Same-depth child nodes share the same X axis, device cards use a fixed 304 x 72 geometry, parent nodes are vertically centered against the total height of their child group, and calculated `Resto` nodes stay in the same structural column as real siblings.
 - Laminar SVG routing: passed. Horizontal Bezier paths use the strict `M x1 y1 C x1+offset y1, x2-offset y2, x2 y2` formula, with the offset fixed to half the X distance between the connected columns.
+- Compact SVG routing: passed. Vertical Bezier paths leave parent nodes from the bottom edge, enter child nodes from the top edge, and keep vertical tangents with bottom anchors spread across the parent width.
 - Distributed parent anchors: passed. Multi-child parent outputs are evenly spaced along the right border so sibling paths fan out without sharing the same origin.
 - Destination-ordered anchor slots: passed. Parent outputs are assigned from top to bottom using the rendered Y position of each child, keeping the fan-out clean when a parent has many outgoing paths.
 - Distributed source anchors: passed. Solar, Bateria, Red and Generador enter `Casa` through separate left-border anchor slots, measured at Y positions 375, 457, 539, and 621 in the desktop QA viewport.
@@ -46,7 +47,7 @@ Prototype: http://127.0.0.1:5174/
 - Tooltip positioning: passed. Desktop tooltip stayed inside the graph stage when opened from the right-side hierarchy; mobile tooltip remained inside the card viewport.
 - Geometric parent centering: passed. Parent center Y is computed from the average center Y of its first and last visible child, including root-level `Casa` and nested parents.
 - Interactions: passed. CDP smoke test verified Cocina branch expansion and hover tooltip display.
-- Data logic: passed. Unit tests cover automatic rest node calculation, configurable overflow tolerance, overflow clamping/logging, reverse flow direction for negative bidirectional values, strict columns, parent centering, source and parent slot distribution, dynamic flow widths, balanced gaps, and cubic path control points.
+- Data logic: passed. Unit tests cover automatic rest node calculation, configurable overflow tolerance, overflow clamping/logging, reverse flow direction for negative bidirectional values, strict columns, compact child grids, parent centering, source and parent slot distribution, dynamic flow widths, balanced gaps, and cubic path control points.
 - Console health: passed. No runtime exceptions. Expected warnings only: Lit dev-mode warning and the intentional Cocina overflow diagnostic.
 
 ## Fixed During QA
@@ -60,6 +61,7 @@ Prototype: http://127.0.0.1:5174/
 - Added subtle dashed styling for calculated `Resto` nodes while preserving the same bounding box as sibling devices.
 - Added edge slot metadata so SVG paths can distribute parent output anchors and target entry anchors deterministically.
 - Added configurable overflow tolerance so small child-over-parent sync mismatches resolve to `Resto 0 W` without warning styling or health-pill counts.
+- Rebuilt compact geometry around the card content width instead of viewport media queries, with a debounced ResizeObserver and a CDP compact smoke test.
 - Kept reverse-flow particles moving backward with SVG `keyPoints` while preserving the same canonical parent-to-child path geometry.
 - Added proportional Sankey-style stroke widths for power paths.
 - Rebalanced the desktop source column width and right padding so the left-center and center-right Bezier corridors have matching visual breathing room.

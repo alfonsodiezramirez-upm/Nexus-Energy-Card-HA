@@ -11,3 +11,4 @@
 - Removes Energy mode controls and keeps the card focused on live power.
 - Adds configurable overflow tolerance to absorb small real-time sensor sync mismatches.
 - Sorts outgoing flow anchors by destination height for cleaner fan-out routing from busy parent nodes.
+- Adds a ResizeObserver-driven compact layout below 600 px with vertical SVG routing and two-column child grids when space allows.

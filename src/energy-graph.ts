@@ -62,6 +62,7 @@ export function buildEnergyGraph(
     warning: config.thresholds?.warning ?? 0.65,
     critical: config.thresholds?.critical ?? 0.85
   };
+  const overflowToleranceRatio = clampPercentage(config.overflow_tolerance ?? 5) / 100;
   const overflowNodes: GraphNode[] = [];
 
   const buildNode = (
@@ -108,7 +109,10 @@ export function buildEnergyGraph(
     }
 
     if (node.children.length > 0) {
-      if (childrenTotal > node.value + Math.max(EPSILON, node.value * 0.005)) {
+      const overflowDifference = childrenTotal - node.value;
+      const allowedOverflow = Math.max(EPSILON, node.value * overflowToleranceRatio);
+
+      if (overflowDifference > allowedOverflow) {
         node.overflow = true;
         node.severity = "overflow";
         overflowNodes.push(node);
@@ -119,6 +123,8 @@ export function buildEnergyGraph(
             )}${node.unit}, parent=${node.value.toFixed(3)}${node.unit}`
           );
         }
+        node.children.push(createRestNode(node, 0));
+      } else if (overflowDifference > EPSILON) {
         node.children.push(createRestNode(node, 0));
       } else if (node.value - childrenTotal > Math.max(EPSILON, node.value * 0.005)) {
         node.children.push(createRestNode(node, node.value - childrenTotal));
@@ -168,6 +174,15 @@ export function flattenNodes(nodes: GraphNode[]): GraphNode[] {
   };
   nodes.forEach(visit);
   return flattened;
+}
+
+function clampPercentage(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 5;
+  }
+
+  return Math.min(100, Math.max(0, parsed));
 }
 
 function createRestNode(parent: GraphNode, value: number): GraphNode {

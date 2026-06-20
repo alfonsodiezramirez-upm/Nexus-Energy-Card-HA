@@ -64,6 +64,7 @@ export interface NexusEnergyCardConfig {
   animation?: boolean;
   animation_speed?: number;
   line_width_base?: number;
+  overflow_tolerance?: number;
   background_style?: NexusBackgroundStyle;
   hide_zero_nodes?: boolean;
   base_color?: string;

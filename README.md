@@ -94,7 +94,7 @@ title: Nexus Energy
 
 The easiest way to configure the card is through the Home Assistant visual editor. The editor exposes:
 
-- General settings: title and main home entity.
+- General settings: title, main home entity, and overflow tolerance.
 - Empty first-run state with no mock entities or generated demo nodes.
 - Accordion tree builder: entity, display name, icon, parent node, direction, capacity, and invert value.
 - Appearance: base flow width, animation speed, background style, zero-node hiding, and base color.
@@ -110,6 +110,7 @@ default_expanded_depth: 2
 animation: true
 animation_speed: 1
 line_width_base: 2
+overflow_tolerance: 5
 background_style: glass
 hide_zero_nodes: false
 base_color: "#38a5ff"
@@ -170,6 +171,7 @@ nodes:
 | `animation` | boolean | `true` | Enables moving particles in power mode. |
 | `animation_speed` | number | `1` | Multiplier for particle speed. |
 | `line_width_base` | number | `2` | Minimum flow width used by proportional paths. |
+| `overflow_tolerance` | number | `5` | Percentage margin that absorbs small child-over-parent sensor sync mismatches before warning. |
 | `background_style` | `glass`, `transparent`, `solid` | `glass` | Card background treatment. |
 | `hide_zero_nodes` | boolean | `false` | Hides zero-value sources/devices for a cleaner map. |
 | `base_color` | color string | `#38a5ff` | Default flow and node accent color. |

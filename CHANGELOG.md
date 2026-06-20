@@ -9,3 +9,5 @@
 - Adds hover/tap node tooltips with current values, parent percentages, cached Home Assistant history, and SVG sparklines.
 - Fixes node editor accordions collapsing while typing after Home Assistant echoes config updates.
 - Removes Energy mode controls and keeps the card focused on live power.
+- Adds configurable overflow tolerance to absorb small real-time sensor sync mismatches.
+- Sorts outgoing flow anchors by destination height for cleaner fan-out routing from busy parent nodes.

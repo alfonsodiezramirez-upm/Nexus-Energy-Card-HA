@@ -49,6 +49,59 @@ describe("buildEnergyGraph", () => {
     warn.mockRestore();
   });
 
+  it("absorbs overflow inside the configured tolerance", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const config: NexusEnergyCardConfig = {
+      overflow_tolerance: 5,
+      nodes: [
+        {
+          id: "kitchen",
+          name: "Cocina",
+          entity: "sensor.kitchen",
+          children: [
+            { id: "oven", name: "Horno", entity: "sensor.oven" },
+            { id: "microwave", name: "Microondas", entity: "sensor.microwave" }
+          ]
+        }
+      ]
+    };
+
+    const graph = buildEnergyGraph(config, hass({ kitchen: 1000, oven: 700, microwave: 340 }), "power");
+    const rest = graph.primaryRoot?.children.find((node) => node.virtual);
+
+    expect(graph.primaryRoot?.overflow).toBe(false);
+    expect(graph.primaryRoot?.severity).toBe("normal");
+    expect(graph.overflowNodes).toHaveLength(0);
+    expect(rest?.value).toBe(0);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("marks overflow when children exceed the configured tolerance", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const config: NexusEnergyCardConfig = {
+      overflow_tolerance: 3,
+      nodes: [
+        {
+          id: "kitchen",
+          name: "Cocina",
+          entity: "sensor.kitchen",
+          children: [
+            { id: "oven", name: "Horno", entity: "sensor.oven" },
+            { id: "microwave", name: "Microondas", entity: "sensor.microwave" }
+          ]
+        }
+      ]
+    };
+
+    const graph = buildEnergyGraph(config, hass({ kitchen: 1000, oven: 700, microwave: 340 }), "power");
+
+    expect(graph.primaryRoot?.overflow).toBe(true);
+    expect(graph.overflowNodes).toHaveLength(1);
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
   it("reverses direction for negative bidirectional values", () => {
     const config: NexusEnergyCardConfig = {
       sources: [{ id: "battery", entity: "sensor.battery", direction: "auto" }],

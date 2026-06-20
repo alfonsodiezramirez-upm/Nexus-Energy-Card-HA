@@ -134,6 +134,17 @@ export class NexusEnergyCardEditor extends LitElement {
             this._patchMain(this._entityPatch(entityId))
           )}
           <label>
+            Tolerancia de desbordamiento (%)
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              .value=${String(this._config.overflow_tolerance ?? 5)}
+              @input=${(event: Event) => this._patchConfig("overflow_tolerance", clampPercentage(Number(valueOf(event))))}
+            />
+          </label>
+          <label>
             Nombre del nodo principal
             <input
               .value=${mainNode.name ?? "Casa"}
@@ -1093,6 +1104,15 @@ function optionalNumber(value: string): number | undefined {
   }
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function clampPercentage(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 5;
+  }
+
+  return Math.min(100, Math.max(0, parsed));
 }
 
 function valueOf(event: Event): string {

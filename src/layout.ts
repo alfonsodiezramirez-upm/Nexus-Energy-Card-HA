@@ -351,7 +351,8 @@ function buildEdges(
 ): PositionedEdge[] {
   const edges: PositionedEdge[] = [];
   if (primary) {
-    for (const [index, source] of sourceNodes.entries()) {
+    const sortedSources = [...sourceNodes].sort((a, b) => nodeCenter(a).y - nodeCenter(b).y);
+    for (const [index, source] of sortedSources.entries()) {
       edges.push({
         id: `${source.id}->${primary.id}`,
         from: source,
@@ -359,7 +360,7 @@ function buildEdges(
         fromSlot: 0,
         fromSlotCount: 1,
         toSlot: index,
-        toSlotCount: sourceNodes.length,
+        toSlotCount: sortedSources.length,
         value: source.value,
         percent: source.percentOfParent,
         severity: source.severity,
@@ -369,7 +370,8 @@ function buildEdges(
   }
 
   for (const node of positionedTree) {
-    for (const [index, child] of node.visibleChildren.entries()) {
+    const sortedChildren = [...node.visibleChildren].sort((a, b) => nodeCenter(a).y - nodeCenter(b).y);
+    for (const [index, child] of sortedChildren.entries()) {
       edges.push({
         id: `${node.id}->${child.id}`,
         from: node,

@@ -50,21 +50,24 @@ const result = await send("Runtime.evaluate", {
       const root = card?.shadowRoot;
       if (!root || !card) return { ok: false, reason: 'card not rendered' };
 
-      root.querySelectorAll('.segmented button')[1]?.click();
-      await card.updateComplete;
-      const energyMode = root.textContent.includes('Mes actual') || Boolean(root.querySelector('.range-select select'));
+      const modeControlsRemoved =
+        !root.querySelector('.segmented') &&
+        !root.querySelector('.range-select') &&
+        !root.querySelector('.now-pill') &&
+        !root.textContent.includes('Energía');
 
       const cocina = [...root.querySelectorAll('.flow-node')].find((node) => node.textContent.includes('Cocina'));
-      cocina?.click();
+      cocina?.querySelector('.collapse-button')?.click();
       await card.updateComplete;
       const kitchenExpanded = root.textContent.includes('Horno') && root.textContent.includes('Microondas');
 
       const source = [...root.querySelectorAll('.flow-node')].find((node) => node.textContent.includes('Solar'));
       source?.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true, composed: true }));
+      await new Promise((resolve) => setTimeout(resolve, 320));
       await card.updateComplete;
       const tooltipVisible = Boolean(root.querySelector('.tooltip'));
 
-      return { ok: energyMode && kitchenExpanded && tooltipVisible, energyMode, kitchenExpanded, tooltipVisible };
+      return { ok: modeControlsRemoved && kitchenExpanded && tooltipVisible, modeControlsRemoved, kitchenExpanded, tooltipVisible };
     })()
   `
 });

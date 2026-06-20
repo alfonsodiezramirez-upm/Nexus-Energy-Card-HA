@@ -25,7 +25,6 @@ import {
   mdiStove,
   mdiToilet,
   mdiTransmissionTower,
-  mdiTrendingDown,
   mdiTrashCanOutline
 } from "@mdi/js";
 import "../src/index";
@@ -57,7 +56,6 @@ const ICONS = new Map<string, string>([
   ["mdi:stove", mdiStove],
   ["mdi:toilet", mdiToilet],
   ["mdi:transmission-tower", mdiTransmissionTower],
-  ["mdi:trending-down", mdiTrendingDown],
   ["mdi:trash-can-outline", mdiTrashCanOutline]
 ]);
 

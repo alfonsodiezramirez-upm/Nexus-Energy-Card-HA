@@ -4,14 +4,13 @@ import { buildEnergyGraph, type HistoryCache } from "./energy-graph";
 import { DEFAULT_CONFIG, EMPTY_CONFIG } from "./default-config";
 import { edgePath, layoutGraph } from "./layout";
 import { calculateEdgeWidth } from "./flow-style";
-import { formatPercent, formatValue, rangeLabel } from "./format";
+import { formatPercent, formatValue } from "./format";
 import type {
   GraphBuildResult,
   GraphLayout,
   HomeAssistantLike,
   NexusEnergyCardConfig,
   NexusMode,
-  NexusRange,
   PositionedEdge,
   PositionedNode
 } from "./types";
@@ -55,7 +54,6 @@ export class NexusEnergyCard extends LitElement {
   @state() private _config: NexusEnergyCardConfig = DEFAULT_CONFIG;
   @state() private _graph: GraphBuildResult = buildEnergyGraph(DEFAULT_CONFIG, undefined, "power");
   @state() private _mode: NexusMode = "power";
-  @state() private _range: NexusRange = "today";
   @state() private _width = 1180;
   @state() private _tooltip?: TooltipState;
   @state() private _expandedIds = new Set<string>();
@@ -98,8 +96,7 @@ export class NexusEnergyCard extends LitElement {
         ...config.thresholds
       }
     };
-    this._mode = config.mode ?? DEFAULT_CONFIG.mode ?? "power";
-    this._range = config.range ?? DEFAULT_CONFIG.range ?? "today";
+    this._mode = "power";
     this._restoreBranchState();
     this._rebuildGraph(true);
   }
@@ -161,58 +158,16 @@ export class NexusEnergyCard extends LitElement {
                 <p>
                   Total en casa
                   <span class="live-dot"></span>
-                  <strong>${this._mode === "power" ? "Ahora" : rangeLabel(this._range)}</strong>
+                  <strong>Ahora</strong>
                 </p>
               </div>
-            </div>
-
-            <div class="toolbar" aria-label="Controles de Nexus Energy">
-              <div class="segmented" role="tablist" aria-label="Modo de operación">
-                <button
-                  class=${this._mode === "power" ? "active" : ""}
-                  type="button"
-                  role="tab"
-                  aria-selected=${this._mode === "power"}
-                  @click=${() => this._setMode("power")}
-                >
-                  Potencia
-                </button>
-                <button
-                  class=${this._mode === "energy" ? "active" : ""}
-                  type="button"
-                  role="tab"
-                  aria-selected=${this._mode === "energy"}
-                  @click=${() => this._setMode("energy")}
-                >
-                  Energía
-                </button>
-              </div>
-
-              ${this._mode === "energy" && this._config.show_time_selector !== false
-                ? html`
-                    <label class="range-select">
-                      <ha-icon icon="mdi:calendar-month-outline"></ha-icon>
-                      <select .value=${this._range} @change=${this._handleRangeChange}>
-                        <option value="today">Hoy</option>
-                        <option value="yesterday">Ayer</option>
-                        <option value="week">Esta semana</option>
-                        <option value="month">Mes actual</option>
-                        <option value="year">Año actual</option>
-                        <option value="custom">Personalizado</option>
-                      </select>
-                    </label>
-                  `
-                : this._mode === "power"
-                  ? html`<div class="now-pill"><ha-icon icon="mdi:clock-outline"></ha-icon> Ahora</div>`
-                  : nothing}
             </div>
           </header>
 
           <section class="summary-strip" aria-label="Resumen energético">
             <div class="primary-metric">
-              <span>${this._mode === "power" ? "Consumo actual" : "Consumo acumulado"}</span>
+              <span>Consumo actual</span>
               <strong>${formatValue(this._graph.total, this._mode, this._config.precision)}</strong>
-              <small><ha-icon icon="mdi:trending-down"></ha-icon> 18% vs ayer 9:00</small>
             </div>
             <div class="health-pill ${this._graph.overflowNodes.length ? "warning" : ""}">
               <ha-icon icon=${this._graph.overflowNodes.length ? "mdi:alert-circle-outline" : "mdi:shield-check-outline"}></ha-icon>
@@ -331,7 +286,7 @@ export class NexusEnergyCard extends LitElement {
       </div>
       <div class="root-title">${node.name}</div>
       <div class="root-value">${formatValue(node.value, this._mode, this._config.precision)}</div>
-      <div class="root-subtitle">${this._mode === "power" ? "Consumo actual" : "Energía del periodo"}</div>
+      <div class="root-subtitle">Consumo actual</div>
       <div class=${`gauge ${hasSolarSource ? "" : "is-hidden"}`} style=${`--gauge:${Math.round(solarBalance * 100)}%`}>
         <span>${Math.round(solarBalance * 100)}%</span>
         <small>Autonomía solar</small>
@@ -428,21 +383,6 @@ export class NexusEnergyCard extends LitElement {
         <path class="sparkline-line" d=${path}></path>
       </svg>
     `;
-  }
-
-  private _setMode(mode: NexusMode): void {
-    if (this._mode === mode) {
-      return;
-    }
-
-    this._mode = mode;
-    this._rebuildGraph(true);
-  }
-
-  private _handleRangeChange(event: Event): void {
-    const value = (event.target as HTMLSelectElement).value as NexusRange;
-    this._range = value;
-    this.dispatchEvent(new CustomEvent("nexus-range-changed", { detail: { range: value }, bubbles: true, composed: true }));
   }
 
   private _toggleNode(event: Event, node: PositionedNode): void {
@@ -592,7 +532,7 @@ export class NexusEnergyCard extends LitElement {
 
   private async _fetchTooltipHistory(entityId: string): Promise<HistoryPoint[]> {
     const end = new Date();
-    const start = new Date(end.getTime() - (this._mode === "power" ? 60 * 60_000 : 24 * 60 * 60_000));
+    const start = new Date(end.getTime() - 60 * 60_000);
 
     if (this._hass?.callWS) {
       try {
@@ -635,7 +575,7 @@ export class NexusEnergyCard extends LitElement {
   }
 
   private _fallbackTooltipHistory(node: PositionedNode): HistoryPoint[] {
-    const rangeMs = this._mode === "power" ? 60 * 60_000 : 24 * 60 * 60_000;
+    const rangeMs = 60 * 60_000;
     const now = Date.now();
     const values = node.history.length ? node.history : [node.value];
     return values.map((value, index) => ({
@@ -987,22 +927,10 @@ export class NexusEnergyCard extends LitElement {
       box-shadow: 0 0 14px rgba(88, 238, 131, 0.9);
     }
 
-    .toolbar,
     .summary-strip {
       display: flex;
       align-items: center;
       gap: 14px;
-    }
-
-    .segmented {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      min-width: 278px;
-      padding: 3px;
-      border: 1px solid var(--nexus-line);
-      border-radius: 22px;
-      background: rgba(12, 22, 34, 0.58);
-      backdrop-filter: blur(12px);
     }
 
     button,
@@ -1011,25 +939,6 @@ export class NexusEnergyCard extends LitElement {
       letter-spacing: 0;
     }
 
-    .segmented button {
-      min-height: 42px;
-      border: 0;
-      border-radius: 18px;
-      color: var(--nexus-muted);
-      background: transparent;
-      cursor: pointer;
-    }
-
-    .segmented button.active {
-      color: #f8fbff;
-      background: linear-gradient(180deg, rgba(58, 167, 255, 0.42), rgba(58, 167, 255, 0.18));
-      box-shadow:
-        inset 0 0 0 1px rgba(120, 190, 255, 0.38),
-        0 6px 18px rgba(42, 132, 220, 0.2);
-    }
-
-    .range-select,
-    .now-pill,
     .health-pill {
       display: flex;
       align-items: center;
@@ -1039,20 +948,6 @@ export class NexusEnergyCard extends LitElement {
       background: rgba(12, 22, 34, 0.55);
       color: var(--nexus-muted);
       backdrop-filter: blur(12px);
-    }
-
-    .range-select,
-    .now-pill {
-      gap: 9px;
-      padding: 0 16px;
-    }
-
-    .range-select select {
-      border: 0;
-      color: inherit;
-      background: transparent;
-      outline: 0;
-      cursor: pointer;
     }
 
     .summary-strip {
@@ -1076,18 +971,6 @@ export class NexusEnergyCard extends LitElement {
       font-size: 48px;
       line-height: 1;
       font-weight: 740;
-    }
-
-    .primary-metric small {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      color: #6bf19c;
-      font-size: 13px;
-    }
-
-    .primary-metric ha-icon {
-      --mdc-icon-size: 15px;
     }
 
     .health-pill {
@@ -1140,10 +1023,6 @@ export class NexusEnergyCard extends LitElement {
     .flow-path.power {
       stroke-dasharray: 5 18;
       animation: dash-flow 1.4s linear infinite;
-    }
-
-    .flow-path.energy {
-      stroke-dasharray: none;
     }
 
     .flow-edge.overflow .flow-halo {
@@ -1578,15 +1457,6 @@ export class NexusEnergyCard extends LitElement {
       .summary-strip {
         align-items: stretch;
         flex-direction: column;
-      }
-
-      .toolbar {
-        flex-direction: column;
-        align-items: stretch;
-      }
-
-      .segmented {
-        min-width: 0;
       }
 
       .primary-metric strong {

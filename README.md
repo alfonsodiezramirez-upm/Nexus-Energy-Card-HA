@@ -2,7 +2,7 @@
 
 ![Nexus Energy Card preview](images/nexus-energy-card-preview.png)
 
-Nexus Energy Card is a Home Assistant Lovelace dashboard card for visualizing a home's power and energy flow as a hierarchical map. It combines left-side generation/import sources, a central home node, right-side rooms/devices, calculated remainder nodes, proportional flow widths, and an editor made for building the tree without writing nested YAML by hand.
+Nexus Energy Card is a Home Assistant Lovelace dashboard card for visualizing a home's live power flow as a hierarchical map. It combines left-side generation/import sources, a central home node, right-side rooms/devices, calculated remainder nodes, proportional flow widths, and an editor made for building the tree without writing nested YAML by hand.
 
 ## Highlights
 
@@ -12,7 +12,7 @@ Nexus Energy Card is a Home Assistant Lovelace dashboard card for visualizing a 
 - Hierarchical parent/child routing with strict columns and centered parent nodes.
 - Automatic `Resto [Node]` virtual nodes when a parent reports more than its configured children.
 - Overflow warnings when child readings exceed the parent reading.
-- Power and energy modes with an optional time range selector.
+- Power-only live flow mode.
 - Proportional Sankey-style SVG flow widths.
 - Distributed anchors on both source and consumer sides for cleaner Bezier paths.
 - Bidirectional source support, including invert polarity.
@@ -94,20 +94,17 @@ title: Nexus Energy
 
 The easiest way to configure the card is through the Home Assistant visual editor. The editor exposes:
 
-- General settings: title, default mode, time selector, and main home entity.
+- General settings: title and main home entity.
 - Empty first-run state with no mock entities or generated demo nodes.
 - Accordion tree builder: entity, display name, icon, parent node, direction, capacity, and invert value.
 - Appearance: base flow width, animation speed, background style, zero-node hiding, and base color.
-- Color thresholds: global or per-node warning colors above a configured power/energy value.
+- Color thresholds: global or per-node warning colors above a configured power value.
 
 ## YAML Example
 
 ```yaml
 type: custom:nexus-energy-card
 title: Nexus Energy
-mode: power
-range: today
-show_time_selector: true
 height: 720
 default_expanded_depth: 2
 animation: true
@@ -127,13 +124,11 @@ sources:
   - id: solar
     name: Solar
     power_entity: sensor.solar_power
-    energy_entity: sensor.solar_energy_today
     icon: mdi:white-balance-sunny
     capacity: 7
   - id: battery
     name: Battery
     power_entity: sensor.battery_power
-    energy_entity: sensor.battery_energy_today
     icon: mdi:battery-charging-60
     capacity: 3
     direction: auto
@@ -141,33 +136,28 @@ sources:
   - id: grid
     name: Grid
     power_entity: sensor.grid_power
-    energy_entity: sensor.grid_energy_today
     icon: mdi:transmission-tower
     capacity: 6
 nodes:
   - id: home
     name: Home
     power_entity: sensor.home_power
-    energy_entity: sensor.home_energy_today
     icon: mdi:home-outline
     capacity: 6
     children:
       - id: ground-floor
         name: Ground Floor
         power_entity: sensor.ground_floor_power
-        energy_entity: sensor.ground_floor_energy_today
         icon: mdi:office-building-marker-outline
         capacity: 3.5
         children:
           - id: living-room
             name: Living Room
             power_entity: sensor.living_room_power
-            energy_entity: sensor.living_room_energy_today
             icon: mdi:sofa-outline
           - id: kitchen
             name: Kitchen
             power_entity: sensor.kitchen_power
-            energy_entity: sensor.kitchen_energy_today
             icon: mdi:pot-steam-outline
 ```
 
@@ -176,9 +166,6 @@ nodes:
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `title` | string | `Nexus Energy` | Card title. |
-| `mode` | `power` or `energy` | `power` | Default display mode. |
-| `range` | `today`, `yesterday`, `week`, `month`, `year`, `custom` | `today` | Energy range label. |
-| `show_time_selector` | boolean | `true` | Shows the range selector in energy mode. |
 | `height` | number | `720` | Preferred graph height. |
 | `animation` | boolean | `true` | Enables moving particles in power mode. |
 | `animation_speed` | number | `1` | Multiplier for particle speed. |
@@ -201,7 +188,6 @@ nodes:
 | `name` | string | Display name. |
 | `entity` | string | Generic entity fallback. |
 | `power_entity` | string | Power sensor, usually `device_class: power`. |
-| `energy_entity` | string | Energy sensor, usually `device_class: energy`. |
 | `icon` | string | Material Design icon, for example `mdi:home-outline`. |
 | `capacity` | number | Optional capacity in kW/kWh for warning thresholds. |
 | `direction` | `auto`, `import`, `export` | Flow direction behavior for sources/devices. |
@@ -211,11 +197,11 @@ nodes:
 
 ## Node Tooltip
 
-Hover a node on desktop or tap it on mobile to open the detail tooltip. The tooltip shows the raw current entity value, the node share relative to its parent, and a lightweight SVG sparkline loaded from Home Assistant history. Power mode requests the last hour; energy mode requests the last 24 hours. Results are cached for 60 seconds per entity and mode.
+Hover a node on desktop or tap it on mobile to open the detail tooltip. The tooltip shows the raw current entity value, the node share relative to its parent, and a lightweight SVG sparkline loaded from Home Assistant history. The card requests the last hour of power data and caches results for 60 seconds per entity.
 
 ### Color thresholds
 
-`above` is interpreted as watts in power mode and as the current energy unit value in energy mode.
+`above` is interpreted as watts.
 
 ```yaml
 color_thresholds:

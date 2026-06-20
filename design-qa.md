@@ -24,7 +24,7 @@ Prototype: http://127.0.0.1:5174/
 
 ## Checks
 
-- Visual structure: passed. The implementation follows the selected dark glassmorphic energy-map direction with left sources, central home hub, right-side hierarchy, curved glowing flows, segmented mode control, live metric, and diagnostic pill.
+- Visual structure: passed. The implementation follows the selected dark glassmorphic power-map direction with left sources, central home hub, right-side hierarchy, curved glowing flows, live metric, and diagnostic pill.
 - Production cleanup: passed. Mockup-only zoom controls and static bottom KPIs were removed from the rendered card, leaving the graph stage as the dominant content region.
 - Runtime render: passed. The card renders nonblank in Chrome headless after Lit hydration.
 - Desktop layout: passed. No clipped root content; visible nodes retain readable text and stable rounded glass surfaces.
@@ -44,7 +44,7 @@ Prototype: http://127.0.0.1:5174/
 - Tooltip mobile interaction: passed. Mobile CDP check verified tap-to-open, tap-same-node-to-close, tap-other-node-to-switch, and tap-background-to-close behavior.
 - Tooltip positioning: passed. Desktop tooltip stayed inside the graph stage when opened from the right-side hierarchy; mobile tooltip remained inside the card viewport.
 - Geometric parent centering: passed. Parent center Y is computed from the average center Y of its first and last visible child, including root-level `Casa` and nested parents.
-- Interactions: passed. CDP smoke test verified Energy mode toggle, Cocina branch expansion, and hover tooltip display.
+- Interactions: passed. CDP smoke test verified Cocina branch expansion and hover tooltip display.
 - Data logic: passed. Unit tests cover automatic rest node calculation, overflow clamping/logging, reverse flow direction for negative bidirectional values, strict columns, parent centering, source and parent slot distribution, dynamic flow widths, balanced gaps, and cubic path control points.
 - Console health: passed. No runtime exceptions. Expected warnings only: Lit dev-mode warning and the intentional Cocina overflow diagnostic.
 
@@ -59,11 +59,12 @@ Prototype: http://127.0.0.1:5174/
 - Added subtle dashed styling for calculated `Resto` nodes while preserving the same bounding box as sibling devices.
 - Added edge slot metadata so SVG paths can distribute parent output anchors and target entry anchors deterministically.
 - Kept reverse-flow particles moving backward with SVG `keyPoints` while preserving the same canonical parent-to-child path geometry.
-- Added proportional Sankey-style stroke widths for power and energy paths.
+- Added proportional Sankey-style stroke widths for power paths.
 - Rebalanced the desktop source column width and right padding so the left-center and center-right Bezier corridors have matching visual breathing room.
 - Added CDP flow QA to verify non-static stroke widths and distributed source input anchors in the rendered shadow DOM.
 - Rebuilt the Lovelace visual editor around the novice workflow: choose the house sensor, add nodes, choose each parent, and let the card build the nested config.
-- Added runtime support for editor-controlled options: time selector visibility, base line width, animation speed, background style, zero-node hiding, inverted polarity, base flow color, and per-node color thresholds.
+- Added runtime support for editor-controlled options: base line width, animation speed, background style, zero-node hiding, inverted polarity, base flow color, and per-node color thresholds.
+- Removed the Energy mode controls and the top-right `Ahora` pill so the production card stays focused on live power.
 - Added a local editor demo route at `/?editor=1` plus CDP editor QA coverage.
 - Removed non-functional zoom controls and static footer KPIs from the card UI, then tightened top/bottom padding around the graph.
 - Split the editor startup config from the demo config so Home Assistant no longer injects mock entities into new cards.

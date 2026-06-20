@@ -69,7 +69,10 @@ const result = await send("Runtime.evaluate", {
       if (!root || !editor) return { ok: false, reason: 'editor not rendered' };
 
       const changes = [];
-      editor.addEventListener('config-changed', (event) => changes.push(event.detail.config));
+      editor.addEventListener('config-changed', (event) => {
+        changes.push(event.detail.config);
+        editor.setConfig(event.detail.config);
+      });
 
       const initialRows = root.querySelectorAll('.node-row').length;
       const initialNodes = editor._config?.nodes?.length ?? -1;
@@ -84,6 +87,16 @@ const result = await send("Runtime.evaluate", {
       const nodeGridColumns = nodeGrid ? getComputedStyle(nodeGrid).gridTemplateColumns.split(' ').filter(Boolean).length : 0;
       const editorShell = root.querySelector('.editor');
       const noHorizontalOverflowAfterFirstAdd = editorShell.scrollWidth <= editorShell.clientWidth + 1;
+      const nameInput = [...root.querySelectorAll('.node-form label')]
+        .find((label) => label.textContent.includes('Nombre a mostrar'))
+        ?.querySelector('input');
+      if (nameInput) {
+        nameInput.value = 'Luces';
+        nameInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        await editor.updateComplete;
+      }
+      const expandedAfterTyping = root.querySelectorAll('.node-form').length;
+      const typedNameVisible = root.querySelector('.row-summary strong')?.textContent.trim() === 'Luces';
 
       [...root.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Fuente')?.click();
       await editor.updateComplete;
@@ -106,6 +119,8 @@ const result = await send("Runtime.evaluate", {
           expandedAfterFirstAdd === 1 &&
           nodeGridColumns === 1 &&
           noHorizontalOverflowAfterFirstAdd &&
+          expandedAfterTyping === 1 &&
+          typedNameVisible &&
           rowsAfterSourceAdd === 2 &&
           expandedAfterSourceAdd === 1 &&
           addedThreshold &&
@@ -120,6 +135,8 @@ const result = await send("Runtime.evaluate", {
         expandedAfterFirstAdd,
         nodeGridColumns,
         noHorizontalOverflowAfterFirstAdd,
+        expandedAfterTyping,
+        typedNameVisible,
         rowsAfterSourceAdd,
         expandedAfterSourceAdd,
         addedThreshold,

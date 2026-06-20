@@ -7,8 +7,7 @@ import type {
   NexusColorThreshold,
   NexusDirection,
   NexusEnergyCardConfig,
-  NexusEnergyNodeConfig,
-  NexusMode
+  NexusEnergyNodeConfig
 } from "./types";
 
 const SOURCE_PARENT_ID = "__source__";
@@ -63,13 +62,13 @@ interface FlatEditorNode {
 export class NexusEnergyCardEditor extends LitElement {
   @state() private _config: NexusEnergyCardConfig = EMPTY_CONFIG;
   @state() private _flatNodes: FlatEditorNode[] = [];
-  @state() private _mode: NexusMode = EMPTY_CONFIG.mode ?? "power";
   @state() private _expandedNodeId?: string;
 
   private _hass?: HomeAssistantLike;
 
   public setConfig(config: NexusEnergyCardConfig): void {
-    this._config = {
+    const previousExpandedId = this._expandedNodeId;
+    const nextConfig = {
       ...EMPTY_CONFIG,
       ...config,
       thresholds: {
@@ -79,9 +78,11 @@ export class NexusEnergyCardEditor extends LitElement {
       sources: config.sources ?? [],
       nodes: config.nodes ?? []
     };
-    this._mode = this._config.mode ?? "power";
-    this._flatNodes = flattenConfig(this._config);
-    this._expandedNodeId = undefined;
+    const nextFlatNodes = flattenConfig(nextConfig);
+    this._config = nextConfig;
+    this._flatNodes = nextFlatNodes;
+    this._expandedNodeId =
+      previousExpandedId && nextFlatNodes.some((node) => node.id === previousExpandedId) ? previousExpandedId : undefined;
   }
 
   public set hass(hass: HomeAssistantLike) {
@@ -129,18 +130,6 @@ export class NexusEnergyCardEditor extends LitElement {
             Titulo de la tarjeta
             <input .value=${this._config.title ?? ""} @input=${(event: Event) => this._patchConfig("title", cleanText(valueOf(event)))} />
           </label>
-          <label>
-            Modo por defecto
-            <select .value=${this._mode} @change=${this._changeMode}>
-              <option value="power">Potencia</option>
-              <option value="energy">Energia</option>
-            </select>
-          </label>
-          ${this._renderCheck(
-            "Selector temporal",
-            this._config.show_time_selector !== false,
-            (checked) => this._patchConfig("show_time_selector", checked)
-          )}
           ${this._renderEntityField("Entidad de la Casa", mainNode.entity ?? mainNode.power_entity ?? "", entities, (entityId) =>
             this._patchMain(this._entityPatch(entityId))
           )}
@@ -423,7 +412,7 @@ export class NexusEnergyCardEditor extends LitElement {
           @input=${(event: Event) => onChange(cleanText(valueOf(event)))}
           placeholder="sensor..."
         />
-        ${entities.length ? nothing : html`<span class="field-note">sensor power/energy</span>`}
+        ${entities.length ? nothing : html`<span class="field-note">sensor power</span>`}
       </label>
     `;
   }
@@ -443,7 +432,7 @@ export class NexusEnergyCardEditor extends LitElement {
       .filter((state) => {
         const entity = state.entity_id;
         const deviceClass = String(state.attributes.device_class ?? "");
-        return entity.startsWith("sensor.") && (deviceClass === "power" || deviceClass === "energy");
+        return entity.startsWith("sensor.") && deviceClass === "power";
       })
       .map((state) => ({
         entity_id: state.entity_id,
@@ -452,11 +441,6 @@ export class NexusEnergyCardEditor extends LitElement {
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }
-
-  private _changeMode = (event: Event): void => {
-    this._mode = valueOf(event) as NexusMode;
-    this._patchConfig("mode", this._mode);
-  };
 
   private _patchConfig<K extends keyof NexusEnergyCardConfig>(key: K, value: NexusEnergyCardConfig[K]): void {
     this._commitConfig({
@@ -567,15 +551,6 @@ export class NexusEnergyCardEditor extends LitElement {
       };
     }
 
-    const deviceClass = this._filteredEntities().find((entity) => entity.entity_id === entityId)?.deviceClass;
-    if (deviceClass === "energy") {
-      return {
-        entity: entityId,
-        power_entity: undefined,
-        energy_entity: entityId
-      };
-    }
-
     return {
       entity: entityId,
       power_entity: entityId,
@@ -642,7 +617,7 @@ export class NexusEnergyCardEditor extends LitElement {
         : [];
     const nextConfig: NexusEnergyCardConfig = {
       ...this._config,
-      mode: this._mode,
+      mode: "power",
       sources,
       nodes
     };

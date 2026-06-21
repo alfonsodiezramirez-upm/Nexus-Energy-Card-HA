@@ -29,8 +29,9 @@ const HORIZONTAL_SIBLING_GAP = 16;
 const HORIZONTAL_GROUP_GAP = 32;
 const HORIZONTAL_SOURCE_GAP = HORIZONTAL_SIBLING_GAP;
 const COMPACT_OUTER_PADDING = 16;
+const COMPACT_CHILD_SIDE_PADDING = 0;
 const COMPACT_GRID_GAP = 8;
-const COMPACT_SECTION_GAP = 34;
+const COMPACT_SECTION_GAP = 40;
 const COMPACT_NODE_MIN_WIDTH = 140;
 const COMPACT_NODE_HEIGHT = 64;
 const COMPACT_SOURCE_HEIGHT = 68;
@@ -94,7 +95,7 @@ export function edgePath(edge: PositionedEdge, orientation: NexusOrientation): s
     return `M ${from.x} ${from.y} C ${from.x + offset} ${from.y}, ${to.x - offset} ${to.y}, ${to.x} ${to.y}`;
   }
 
-  const offset = (to.y - from.y) / 2;
+  const offset = Math.abs(to.y - from.y) * 0.45;
   return `M ${from.x} ${from.y} C ${from.x} ${from.y + offset}, ${to.x} ${to.y - offset}, ${to.x} ${to.y}`;
 }
 
@@ -222,7 +223,7 @@ function placeCompactChildren(
   }
 
   const indent = Math.min(20, Math.max(0, depth - 1) * 8);
-  const availableWidth = Math.max(COMPACT_NODE_MIN_WIDTH, width - COMPACT_OUTER_PADDING * 2 - indent * 2);
+  const availableWidth = Math.max(COMPACT_NODE_MIN_WIDTH, width - COMPACT_CHILD_SIDE_PADDING * 2 - indent * 2);
   const columns = availableWidth >= COMPACT_NODE_MIN_WIDTH * 2 + COMPACT_GRID_GAP ? 2 : 1;
   const nodeWidth = Math.floor((availableWidth - COMPACT_GRID_GAP * (columns - 1)) / columns);
   const left = (width - (nodeWidth * columns + COMPACT_GRID_GAP * (columns - 1))) / 2;

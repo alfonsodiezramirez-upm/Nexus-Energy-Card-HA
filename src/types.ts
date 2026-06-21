@@ -58,7 +58,6 @@ export interface NexusEnergyCardConfig {
   mode?: NexusMode;
   range?: NexusRange;
   show_time_selector?: boolean;
-  height?: number;
   unit?: string;
   precision?: number;
   animation?: boolean;

@@ -22,6 +22,8 @@ const TOOLTIP_WIDTH = 252;
 const TOOLTIP_HEIGHT = 210;
 const COMPACT_BREAKPOINT = 600;
 const RESIZE_DEBOUNCE = 100;
+const WIDE_GRAPH_HEIGHT = 720;
+const COMPACT_GRAPH_HEIGHT = 520;
 
 type NexusBreakpoint = "wide" | "compact";
 
@@ -95,12 +97,14 @@ export class NexusEnergyCard extends LitElement {
       throw new Error("Parámetros 'entities', 'sources' o 'nodes' mínimos no definidos.");
     }
 
+    const configWithoutLegacyHeight = { ...config } as NexusEnergyCardConfig & { height?: number };
+    delete configWithoutLegacyHeight.height;
     this._config = {
       ...DEFAULT_CONFIG,
-      ...config,
+      ...configWithoutLegacyHeight,
       thresholds: {
         ...DEFAULT_CONFIG.thresholds,
-        ...config.thresholds
+        ...configWithoutLegacyHeight.thresholds
       }
     };
     this._mode = "power";
@@ -173,7 +177,7 @@ export class NexusEnergyCard extends LitElement {
 
   protected override render() {
     const orientation = this._breakpoint === "compact" ? "vertical" : "horizontal";
-    const graphHeight = orientation === "vertical" ? Math.max(520, this._config.height ?? 720) : this._config.height ?? 720;
+    const graphHeight = orientation === "vertical" ? COMPACT_GRAPH_HEIGHT : WIDE_GRAPH_HEIGHT;
     const layout = layoutGraph(this._graph, {
       width: this._width,
       height: graphHeight,

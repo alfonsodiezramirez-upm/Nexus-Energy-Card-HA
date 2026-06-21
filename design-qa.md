@@ -31,7 +31,7 @@ Prototype: http://127.0.0.1:5174/
 - Mobile layout: passed. The layout switches from a ResizeObserver-measured container breakpoint at 600 px, uses vertical flow routing, stacks sources above the home node, and places child consumers in a compact one/two-column grid without horizontal clipping.
 - Strict column layout: passed. Same-depth child nodes share the same X axis, device cards use a fixed 304 x 72 geometry, parent nodes are vertically centered against the total height of their child group, and calculated `Resto` nodes stay in the same structural column as real siblings.
 - Laminar SVG routing: passed. Horizontal Bezier paths use the strict `M x1 y1 C x1+offset y1, x2-offset y2, x2 y2` formula, with the offset fixed to half the X distance between the connected columns.
-- Compact SVG routing: passed. Vertical Bezier paths leave parent nodes from the bottom edge, enter child nodes from the top edge, and keep vertical tangents with bottom anchors spread across the parent width.
+- Compact SVG routing: passed. Vertical Bezier paths leave parent nodes from the bottom edge, enter child nodes from the top edge, keep vertical tangents, use a dynamic 45% vertical offset, and map bottom anchors to child grid columns by real X position to avoid crossings.
 - Distributed parent anchors: passed. Multi-child parent outputs are evenly spaced along the right border so sibling paths fan out without sharing the same origin.
 - Destination-ordered anchor slots: passed. Parent outputs are assigned from top to bottom using the rendered Y position of each child, keeping the fan-out clean when a parent has many outgoing paths.
 - Distributed source anchors: passed. Solar, Bateria, Red and Generador enter `Casa` through separate left-border anchor slots, measured at Y positions 375, 457, 539, and 621 in the desktop QA viewport.
@@ -39,6 +39,7 @@ Prototype: http://127.0.0.1:5174/
 - Balanced horizontal rhythm: passed. The source column, `Casa`, and the first hierarchy column now keep symmetric left/right gaps, with tests guarding a minimum 52 px desktop spacing.
 - Left-column rhythm: passed. Source cards use the same 16 px vertical cadence as right-side sibling device groups.
 - Visual editor structure: passed. The editor exposes general settings, main home entity, parent-child node builder, appearance controls, animation controls, zero-node cleanup, and color thresholds in separated dense panels without horizontal scrolling.
+- Editor height ownership: passed. The visual editor no longer exposes a manual `height` field; legacy height values are stripped from edited configs so Home Assistant/card content owns sizing.
 - Editor zero-state: passed. New editor configs start with `nodes: []` and `sources: []`; the builder initially shows only the large `Anadir Primer Nodo` action.
 - Editor accordion: passed. Node rows render as compact summaries by default, expand into a one-column form, and keep only one form open at a time.
 - Editor interactions: passed. CDP editor smoke test verified zero-state startup, first-node creation, source creation, one-column node fields, one-column threshold fields, no horizontal overflow, add-threshold, and `config-changed` emission.
@@ -47,7 +48,7 @@ Prototype: http://127.0.0.1:5174/
 - Tooltip positioning: passed. Desktop tooltip stayed inside the graph stage when opened from the right-side hierarchy; mobile tooltip remained inside the card viewport.
 - Geometric parent centering: passed. Parent center Y is computed from the average center Y of its first and last visible child, including root-level `Casa` and nested parents.
 - Interactions: passed. CDP smoke test verified Cocina branch expansion and hover tooltip display.
-- Data logic: passed. Unit tests cover automatic rest node calculation, configurable overflow tolerance, overflow clamping/logging, reverse flow direction for negative bidirectional values, strict columns, compact child grids, parent centering, source and parent slot distribution, dynamic flow widths, balanced gaps, and cubic path control points.
+- Data logic: passed. Unit tests cover automatic rest node calculation, configurable overflow tolerance, overflow clamping/logging, reverse flow direction for negative bidirectional values, strict columns, compact child grids, compact anti-crossing anchor order, parent centering, source and parent slot distribution, dynamic flow widths, balanced gaps, and cubic path control points.
 - Console health: passed. No runtime exceptions. Expected warnings only: Lit dev-mode warning and the intentional Cocina overflow diagnostic.
 
 ## Fixed During QA
@@ -62,6 +63,8 @@ Prototype: http://127.0.0.1:5174/
 - Added edge slot metadata so SVG paths can distribute parent output anchors and target entry anchors deterministically.
 - Added configurable overflow tolerance so small child-over-parent sync mismatches resolve to `Resto 0 W` without warning styling or health-pill counts.
 - Rebuilt compact geometry around the card content width instead of viewport media queries, with a debounced ResizeObserver and a CDP compact smoke test.
+- Removed manual height configuration from the editor and documentation.
+- Refined compact routing with X-sorted child slots, 40 px parent-grid breathing room, and CDP checks for crossing-free mapping.
 - Kept reverse-flow particles moving backward with SVG `keyPoints` while preserving the same canonical parent-to-child path geometry.
 - Added proportional Sankey-style stroke widths for power paths.
 - Rebalanced the desktop source column width and right padding so the left-center and center-right Bezier corridors have matching visual breathing room.

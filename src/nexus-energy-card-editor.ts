@@ -68,15 +68,16 @@ export class NexusEnergyCardEditor extends LitElement {
 
   public setConfig(config: NexusEnergyCardConfig): void {
     const previousExpandedId = this._expandedNodeId;
+    const configWithoutLegacyHeight = omitLegacyHeight(config);
     const nextConfig = {
       ...EMPTY_CONFIG,
-      ...config,
+      ...configWithoutLegacyHeight,
       thresholds: {
         ...EMPTY_CONFIG.thresholds,
-        ...config.thresholds
+        ...configWithoutLegacyHeight.thresholds
       },
-      sources: config.sources ?? [],
-      nodes: config.nodes ?? []
+      sources: configWithoutLegacyHeight.sources ?? [],
+      nodes: configWithoutLegacyHeight.nodes ?? []
     };
     const nextFlatNodes = flattenConfig(nextConfig);
     this._config = nextConfig;
@@ -345,16 +346,6 @@ export class NexusEnergyCardEditor extends LitElement {
               max="6"
               .value=${String(this._config.default_expanded_depth ?? 2)}
               @input=${(event: Event) => this._patchConfig("default_expanded_depth", Number(valueOf(event)))}
-            />
-          </label>
-          <label>
-            Alto
-            <input
-              type="number"
-              min="520"
-              step="20"
-              .value=${String(this._config.height ?? 720)}
-              @input=${(event: Event) => this._patchConfig("height", Number(valueOf(event)))}
             />
           </label>
         </div>
@@ -1095,6 +1086,12 @@ function uniqueNodeId(rows: FlatEditorNode[], prefix: string): string {
 
 function cleanText(value: string): string {
   return value.trim();
+}
+
+function omitLegacyHeight(config: NexusEnergyCardConfig): NexusEnergyCardConfig {
+  const next = { ...config } as NexusEnergyCardConfig & { height?: number };
+  delete next.height;
+  return next;
 }
 
 function optionalNumber(value: string): number | undefined {

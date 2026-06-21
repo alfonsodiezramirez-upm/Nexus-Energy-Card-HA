@@ -174,7 +174,7 @@ describe("layoutGraph", () => {
 
     const numbers = parsePath(edgePath(edge!, "vertical"));
     const [x1, y1, c1x, c1y, c2x, c2y, x2, y2] = numbers;
-    const offset = (y2 - y1) / 2;
+    const offset = Math.abs(y2 - y1) * 0.45;
 
     expect(c1x).toBe(x1);
     expect(c1y).toBeCloseTo(y1 + offset, 5);
@@ -192,6 +192,24 @@ describe("layoutGraph", () => {
     expect(startXs).toEqual([...startXs].sort((a, b) => a - b));
     expect(startXs[0]).toBeCloseTo(home.x + home.width / (outgoing.length + 1), 5);
     expect(startXs.at(-1)).toBeCloseTo(home.x + (home.width * outgoing.length) / (outgoing.length + 1), 5);
+  });
+
+  it("maps compact parent anchors to child grid columns without crossing", () => {
+    const layout = fixtureCompactGridLayout();
+    const outgoing = layout.edges.filter((edge) => edge.from.id === "home");
+    const byStartX = outgoing
+      .map((edge) => {
+        const numbers = parsePath(edgePath(edge, "vertical"));
+        return {
+          startX: numbers[0],
+          targetX: numbers[6],
+          targetId: edge.to.id
+        };
+      })
+      .sort((a, b) => a.startX - b.startX);
+
+    expect(byStartX.map((edge) => edge.targetId)).toEqual(["load-a", "load-c", "load-b", "load-d"]);
+    expect(byStartX.map((edge) => edge.targetX)).toEqual([...byStartX.map((edge) => edge.targetX)].sort((a, b) => a - b));
   });
 });
 
@@ -211,6 +229,18 @@ function fixtureCompactLayout() {
   const graph = buildEnergyGraph(fixtureConfig(), fixtureHass(), "power");
   return layoutGraph(graph, {
     width: 360,
+    height: 520,
+    orientation: "vertical",
+    expandedIds: new Set(),
+    collapsedIds: new Set(),
+    defaultExpandedDepth: 2
+  });
+}
+
+function fixtureCompactGridLayout() {
+  const graph = buildEnergyGraph(fixtureGridConfig(), fixtureHass(), "power");
+  return layoutGraph(graph, {
+    width: 520,
     height: 520,
     orientation: "vertical",
     expandedIds: new Set(),
@@ -268,6 +298,24 @@ function fixtureConfig(): NexusEnergyCardConfig {
               { id: "bedroom-2", name: "Dormitorio 2", entity: "sensor.bedroom_2" }
             ]
           }
+        ]
+      }
+    ]
+  };
+}
+
+function fixtureGridConfig(): NexusEnergyCardConfig {
+  return {
+    sources: [],
+    nodes: [
+      {
+        id: "home",
+        name: "Casa",
+        children: [
+          { id: "load-a", name: "A", entity: "sensor.living_room" },
+          { id: "load-b", name: "B", entity: "sensor.kitchen" },
+          { id: "load-c", name: "C", entity: "sensor.main_bedroom" },
+          { id: "load-d", name: "D", entity: "sensor.bedroom_2" }
         ]
       }
     ]

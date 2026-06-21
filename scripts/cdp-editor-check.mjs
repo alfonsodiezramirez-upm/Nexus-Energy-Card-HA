@@ -74,6 +74,10 @@ const result = await send("Runtime.evaluate", {
         editor.setConfig(event.detail.config);
       });
 
+      editor.setConfig({ ...editor._config, height: 900 });
+      await editor.updateComplete;
+      const heightFieldRemoved = !root.textContent.includes('Alto');
+      const legacyHeightStripped = !('height' in editor._config);
       const initialRows = root.querySelectorAll('.node-row').length;
       const initialNodes = editor._config?.nodes?.length ?? -1;
       const initialSources = editor._config?.sources?.length ?? -1;
@@ -114,6 +118,8 @@ const result = await send("Runtime.evaluate", {
           initialRows === 0 &&
           initialNodes === 0 &&
           initialSources === 0 &&
+          heightFieldRemoved &&
+          legacyHeightStripped &&
           Boolean(zeroButton) &&
           rowsAfterFirstAdd === 1 &&
           expandedAfterFirstAdd === 1 &&
@@ -130,6 +136,8 @@ const result = await send("Runtime.evaluate", {
         initialRows,
         initialNodes,
         initialSources,
+        heightFieldRemoved,
+        legacyHeightStripped,
         hasZeroButton: Boolean(zeroButton),
         rowsAfterFirstAdd,
         expandedAfterFirstAdd,

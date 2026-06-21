@@ -105,7 +105,6 @@ The easiest way to configure the card is through the Home Assistant visual edito
 ```yaml
 type: custom:nexus-energy-card
 title: Nexus Energy
-height: 720
 default_expanded_depth: 2
 animation: true
 animation_speed: 1
@@ -167,7 +166,6 @@ nodes:
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `title` | string | `Nexus Energy` | Card title. |
-| `height` | number | `720` | Preferred graph height. |
 | `animation` | boolean | `true` | Enables moving particles in power mode. |
 | `animation_speed` | number | `1` | Multiplier for particle speed. |
 | `line_width_base` | number | `2` | Minimum flow width used by proportional paths. |

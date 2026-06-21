@@ -1,58 +1,43 @@
 # Nexus Energy Card
 
+Nexus Energy Card is a Home Assistant Lovelace dashboard card for visualizing live home power flow as a compact, hierarchical map. It shows energy sources, the main home load, rooms/devices, calculated remainder nodes, proportional Sankey-style flow widths, and a visual editor for building the tree without writing nested YAML by hand.
+
 ![Nexus Energy Card preview](images/nexus-energy-card-preview.png)
-
-Nexus Energy Card is a Home Assistant Lovelace dashboard card for visualizing a home's live power flow as a hierarchical map. It combines left-side generation/import sources, a central home node, right-side rooms/devices, calculated remainder nodes, proportional flow widths, and an editor made for building the tree without writing nested YAML by hand.
-
-## Highlights
-
-- Custom Lovelace element: `custom:nexus-energy-card`.
-- Visual card editor: `nexus-energy-card-editor`.
-- HACS-ready dashboard plugin structure.
-- Hierarchical parent/child routing with strict columns and centered parent nodes.
-- Automatic `Resto [Node]` virtual nodes when a parent reports more than its configured children.
-- Overflow warnings when child readings exceed the parent reading.
-- Power-only live flow mode.
-- Proportional Sankey-style SVG flow widths.
-- Distributed anchors on both source and consumer sides for cleaner Bezier paths.
-- Bidirectional source support, including invert polarity.
-- Optional zero-value node hiding.
-- Per-node or global color thresholds.
-- Hover/tap tooltip with current value, parent share, and Home Assistant history sparkline.
-- Container-aware responsive layout with a compact vertical SVG routing mode below 600 px.
-- Shadow DOM styling with glass, transparent, and solid background modes.
 
 ![Nexus Energy Card editor](images/nexus-energy-card-editor.png)
 
-## HACS Installation
+## Features
 
-### Custom repository
+- Lovelace card type: `custom:nexus-energy-card`.
+- Visual editor: `nexus-energy-card-editor`.
+- HACS-compatible Dashboard plugin structure.
+- Live power-focused UI with source -> home -> consumer routing.
+- Strict hierarchical layout with centered parent nodes and aligned child columns.
+- Calculated remainder nodes, currently displayed as `Resto [node]`, when a parent reports more power than its configured children.
+- Configurable overflow tolerance to absorb small real-time sensor synchronization mismatches.
+- Proportional SVG flow widths, animated particles, and warning/critical styling.
+- Clean Bezier routing on desktop and compact views, plus an ultra-compact single-column mobile layout.
+- Hover/tap tooltip with current value, parent percentage, and cached Home Assistant history sparkline.
+- Visual tree builder with parent-child relationships, source nodes, polarity inversion, capacity, and color thresholds.
+- Dark-mode friendly editor controls.
+- Background styles: `glass`, `transparent`, and `solid`.
 
-1. In Home Assistant, open **HACS**.
-2. Open the three-dot menu and choose **Custom repositories**.
-3. Add your GitHub repository URL.
-4. Select category **Dashboard**.
-5. Click **Add**.
-6. Install **Nexus Energy Card** from HACS.
-7. Refresh the browser cache if Home Assistant does not load the new card immediately.
+## HACS Compatibility
 
-HACS calls dashboard cards "Dashboard" in the UI and "plugin" internally. This repository is configured as a HACS plugin.
+This repository is prepared as a HACS **Dashboard** repository. In HACS documentation this type is also called a `plugin`.
 
-### Repository requirements
-
-For best HACS compatibility, keep the repository name as:
-
-```text
-nexus-energy-card
-```
-
-The built file is:
+Required files included in this repository:
 
 ```text
+hacs.json
 dist/nexus-energy-card.js
+README.md
+images/nexus-energy-card-preview.png
+images/nexus-energy-card-editor.png
+.github/workflows/validate.yml
 ```
 
-The root `hacs.json` also declares:
+The HACS manifest is intentionally small:
 
 ```json
 {
@@ -61,7 +46,46 @@ The root `hacs.json` also declares:
 }
 ```
 
-## Manual Installation
+HACS will find `dist/nexus-energy-card.js` and install it as a dashboard resource.
+
+For publication in HACS, also configure the GitHub repository itself:
+
+- Make the repository public.
+- Use a short GitHub description such as: `Hierarchical live power flow card for Home Assistant Lovelace`.
+- Enable GitHub issues.
+- Add useful topics, for example: `home-assistant`, `hacs`, `lovelace`, `dashboard`, `custom-card`, `energy`, `power`, `typescript`, `lit`.
+- Publish GitHub releases, not only tags, when you want HACS users to receive versioned updates.
+- Keep `dist/nexus-energy-card.js` available either on the default branch or attached to each release.
+
+Official HACS references:
+
+- General publishing requirements: https://www.hacs.xyz/docs/publish/start/
+- Dashboard plugin requirements: https://www.hacs.xyz/docs/publish/plugin/
+- HACS validation action: https://www.hacs.xyz/docs/publish/action/
+
+## Installation
+
+### Install with HACS
+
+1. Open Home Assistant.
+2. Go to **HACS**.
+3. Open the three-dot menu.
+4. Choose **Custom repositories**.
+5. Add this repository URL.
+6. Select category **Dashboard**.
+7. Click **Add**.
+8. Search for **Nexus Energy Card** in HACS.
+9. Install it.
+10. Restart Home Assistant or refresh the browser cache if the card does not appear immediately.
+
+If HACS does not add the dashboard resource automatically, add it manually:
+
+```yaml
+url: /hacsfiles/nexus-energy-card/nexus-energy-card.js
+type: module
+```
+
+### Manual installation
 
 Build the card:
 
@@ -70,49 +94,77 @@ npm ci
 npm run build
 ```
 
-Copy the bundle into Home Assistant:
+Copy the bundle to Home Assistant:
 
 ```text
 dist/nexus-energy-card.js -> /config/www/nexus-energy-card.js
 ```
 
-Add it as a dashboard resource:
+Add the dashboard resource:
 
 ```yaml
 url: /local/nexus-energy-card.js
 type: module
 ```
 
-Then use the card:
+## Quick start
+
+Add a new manual card or use the visual editor:
 
 ```yaml
 type: custom:nexus-energy-card
 title: Nexus Energy
+sources:
+  - id: grid
+    name: Grid
+    power_entity: sensor.grid_power
+    icon: mdi:transmission-tower
+nodes:
+  - id: home
+    name: Home
+    power_entity: sensor.home_power
+    icon: mdi:home-outline
+    children:
+      - id: kitchen
+        name: Kitchen
+        power_entity: sensor.kitchen_power
+        icon: mdi:pot-steam-outline
+      - id: lights
+        name: Lights
+        power_entity: sensor.lights_power
+        icon: mdi:lightbulb-outline
 ```
 
-## Basic Configuration
+The first item in `nodes` is treated as the main home node. Child nodes can be nested to build rooms, floors, circuits, or individual devices.
 
-The easiest way to configure the card is through the Home Assistant visual editor. The editor exposes:
+## Visual editor
 
-- General settings: title, main home entity, and overflow tolerance.
-- Empty first-run state with no mock entities or generated demo nodes.
-- Accordion tree builder: entity, display name, icon, parent node, direction, capacity, and invert value.
-- Appearance: base flow width, animation speed, background style, zero-node hiding, and base color.
-- Color thresholds: global or per-node warning colors above a configured power value.
+The visual editor is the recommended setup path. New cards start empty, so no mock entities are injected into your Home Assistant configuration.
 
-## YAML Example
+The editor includes:
+
+- General card title and main home entity settings.
+- Overflow tolerance.
+- Node tree builder with collapsible rows.
+- Source and consumer node creation.
+- Parent selection for each node.
+- Entity picker, display name, MDI icon, direction, capacity, and invert value.
+- Appearance controls for line width, animation speed, background style, base color, zero-value node hiding, and default expanded depth.
+- Per-node or global color thresholds.
+
+## Full YAML example
 
 ```yaml
 type: custom:nexus-energy-card
 title: Nexus Energy
-default_expanded_depth: 2
 animation: true
 animation_speed: 1
-line_width_base: 2
+line_width_base: 1.5
 overflow_tolerance: 5
 background_style: glass
 hide_zero_nodes: false
 base_color: "#38a5ff"
+default_expanded_depth: 2
 thresholds:
   warning: 0.65
   critical: 0.85
@@ -148,7 +200,7 @@ nodes:
       - id: ground-floor
         name: Ground Floor
         power_entity: sensor.ground_floor_power
-        icon: mdi:office-building-marker-outline
+        icon: mdi:home-floor-0
         capacity: 3.5
         children:
           - id: living-room
@@ -159,45 +211,47 @@ nodes:
             name: Kitchen
             power_entity: sensor.kitchen_power
             icon: mdi:pot-steam-outline
+      - id: top-floor
+        name: Top Floor
+        power_entity: sensor.top_floor_power
+        icon: mdi:home-floor-1
 ```
 
-## Configuration Reference
+## Configuration reference
+
+### Card options
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `title` | string | `Nexus Energy` | Card title. |
-| `animation` | boolean | `true` | Enables moving particles in power mode. |
-| `animation_speed` | number | `1` | Multiplier for particle speed. |
-| `line_width_base` | number | `2` | Minimum flow width used by proportional paths. |
-| `overflow_tolerance` | number | `5` | Percentage margin that absorbs small child-over-parent sensor sync mismatches before warning. |
+| `animation` | boolean | `true` | Enables moving particles on power flows. |
+| `animation_speed` | number | `1` | Particle speed multiplier. |
+| `line_width_base` | number | `1.5` | Minimum flow width used by proportional paths. |
+| `overflow_tolerance` | number | `5` | Percentage margin used to ignore small child-over-parent sensor mismatches. |
 | `background_style` | `glass`, `transparent`, `solid` | `glass` | Card background treatment. |
-| `hide_zero_nodes` | boolean | `false` | Hides zero-value sources/devices for a cleaner map. |
+| `hide_zero_nodes` | boolean | `false` | Hides zero-value sources and devices. |
 | `base_color` | color string | `#38a5ff` | Default flow and node accent color. |
-| `default_expanded_depth` | number | `2` | Initial visible depth for hierarchy branches. |
+| `default_expanded_depth` | number | `2` | Initial visible hierarchy depth. |
 | `thresholds.warning` | number | `0.65` | Warning ratio for capacity or parent share. |
 | `thresholds.critical` | number | `0.85` | Critical ratio for capacity or parent share. |
-| `color_thresholds` | array | `[]` | Per-node or global custom colors above a value. |
-| `sources` | array | `[]` | Left-side source nodes: solar, battery, grid, generator. |
-| `nodes` | array | `[]` | Main home node and nested child tree. |
+| `color_thresholds` | array | `[]` | Custom colors above configured watt values. |
+| `sources` | array | `[]` | Source nodes such as solar, grid, battery, or generator. |
+| `nodes` | array | `[]` | Main home node and nested consumer tree. |
 
-### Node fields
+### Node options
 
 | Key | Type | Description |
 | --- | --- | --- |
-| `id` | string | Stable node identifier. |
+| `id` | string | Stable node identifier. Use lowercase IDs without spaces when possible. |
 | `name` | string | Display name. |
 | `entity` | string | Generic entity fallback. |
-| `power_entity` | string | Power sensor, usually `device_class: power`. |
+| `power_entity` | string | Power sensor entity, usually `device_class: power`. |
 | `icon` | string | Material Design icon, for example `mdi:home-outline`. |
-| `capacity` | number | Optional capacity in kW/kWh for warning thresholds. |
-| `direction` | `auto`, `import`, `export` | Flow direction behavior for sources/devices. |
-| `invert_value` | boolean | Flips sign before direction is resolved. Useful for batteries/inverters. |
-| `color` | color string | Optional node color. |
+| `capacity` | number | Optional capacity used for warning and critical styling. |
+| `direction` | `auto`, `import`, `export` | Flow direction behavior. Useful for sources and bidirectional sensors. |
+| `invert_value` | boolean | Flips the sensor sign before direction is resolved. Useful for batteries and inverters. |
+| `color` | color string | Optional node accent color. |
 | `children` | array | Nested child nodes. |
-
-## Node Tooltip
-
-Hover a node on desktop or tap it on mobile to open the detail tooltip. The tooltip shows the raw current entity value, the node share relative to its parent, and a lightweight SVG sparkline loaded from Home Assistant history. The card requests the last hour of power data and caches results for 60 seconds per entity.
 
 ### Color thresholds
 
@@ -213,71 +267,156 @@ color_thresholds:
     color: "#ffb000"
 ```
 
+Use `node_id: "__all__"` for a global threshold.
+
+## How calculations work
+
+### Values
+
+The card reads live power sensors and normalizes supported power units into kW internally. Display formatting chooses W or kW depending on the value.
+
+### Remainder nodes
+
+If a parent has more measured power than the sum of its visible children, the card creates a virtual remainder node. This helps reveal unmodeled consumption without requiring every device to be configured.
+
+### Overflow tolerance
+
+Real-time Home Assistant sensors often update at slightly different times. `overflow_tolerance` prevents small timing mismatches from being shown as errors.
+
+Example:
+
+```yaml
+overflow_tolerance: 5
+```
+
+If children exceed the parent by 5% or less, the overflow is ignored and the remainder is treated as `0 W`.
+
+### Tooltips and history
+
+Hover a node on desktop or tap it on mobile to open a tooltip. The tooltip shows:
+
+- Current raw entity value.
+- Unit of measurement from Home Assistant attributes.
+- Percentage relative to the parent node.
+- Lightweight SVG sparkline.
+
+History is requested from Home Assistant and cached for 60 seconds per entity to avoid repeated database calls while the user moves across the card.
+
+## Responsive behavior
+
+The card observes its own container width with `ResizeObserver`, which is important for Home Assistant masonry dashboards.
+
+Layout modes:
+
+| Container width | Layout |
+| --- | --- |
+| `> 600px` | Horizontal source -> home -> consumer map. |
+| `381px - 600px` | Compact vertical layout with two-column child grids when space allows. |
+| `<= 380px` | Ultra-compact single-column layout. |
+
+Breakpoint hysteresis is used to prevent flickering when the card width sits near a boundary.
+
 ## Development
+
+Install dependencies:
 
 ```bash
 npm ci
-npm run dev
-npm run test
-npm run build
 ```
 
-Local demo:
+Run the local demo:
+
+```bash
+npm run dev
+```
+
+Run checks:
+
+```bash
+npm run test
+npm run build
+npm run check
+```
+
+Local demo URLs:
 
 ```text
 http://127.0.0.1:5173/
-```
-
-Local editor zero-state demo:
-
-```text
 http://127.0.0.1:5173/?editor=1
-```
-
-Local editor demo with example nodes:
-
-```text
 http://127.0.0.1:5173/?editor=1&demo=1
 ```
 
 If Vite selects another port because `5173` is busy, use the URL printed by `npm run dev`.
 
-## Release Workflow
+## Release workflow
 
 1. Update `package.json` and `CHANGELOG.md`.
-2. Build locally:
+2. Run:
 
    ```bash
    npm run check
    ```
 
-3. Commit the generated `dist/nexus-energy-card.js`.
-4. Create and push a version tag:
+3. Commit source changes and the generated bundle:
+
+   ```text
+   dist/nexus-energy-card.js
+   ```
+
+4. Create a version tag:
 
    ```bash
    git tag v0.1.0
    git push origin v0.1.0
    ```
 
-5. The GitHub release workflow builds and attaches `dist/nexus-energy-card.js` to the release.
+5. Publish a GitHub release for the tag.
 
-For inclusion in the default HACS store, also set a GitHub repository description, enable issues, add topics such as `home-assistant`, `hacs`, `lovelace`, `custom-card`, `energy`, `dashboard`, `typescript`, and make a full GitHub release.
+The included release workflow builds the project and attaches `dist/nexus-energy-card.js` to the release.
 
-## HACS Validation
+## HACS validation
 
-This repository includes:
+The repository includes `.github/workflows/validate.yml`.
 
-- `hacs.json`
-- `.github/workflows/validate.yml`
-- `.github/workflows/release.yml`
-- `dist/nexus-energy-card.js`
-- README images required by HACS plugin checks
-
-The HACS validation workflow runs with:
+It runs:
 
 ```yaml
 category: plugin
 ```
+
+This matches HACS Dashboard repositories.
+
+## Troubleshooting
+
+### The card does not appear in the card picker
+
+- Clear the browser cache.
+- Reload Home Assistant.
+- Confirm the dashboard resource is loaded as `type: module`.
+- Confirm the installed file is `nexus-energy-card.js`.
+
+### The card shows no values
+
+- Confirm each configured entity exists.
+- Prefer power sensors with `device_class: power`.
+- Check that the sensor state is numeric.
+- For batteries or inverters, try `invert_value: true` or `direction: auto`.
+
+### The visual tree looks incomplete
+
+- Increase `default_expanded_depth`.
+- Disable `hide_zero_nodes` while debugging.
+- Check whether parent sensors and child sensors update at different intervals.
+
+## Support
+
+Please open a GitHub issue with:
+
+- Home Assistant version.
+- HACS version.
+- Browser name and version.
+- Card YAML or screenshots from the visual editor.
+- Relevant browser console errors.
 
 ## License
 

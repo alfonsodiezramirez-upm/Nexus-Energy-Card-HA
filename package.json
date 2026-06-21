@@ -1,7 +1,7 @@
 {
   "name": "nexus-energy-card",
   "version": "0.1.0",
-  "description": "Nexus Energy Card: advanced hierarchical power and energy flow Lovelace card for Home Assistant.",
+  "description": "Nexus Energy Card: hierarchical live power flow Lovelace card for Home Assistant.",
   "type": "module",
   "license": "MIT",
   "private": true,

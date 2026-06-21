@@ -211,6 +211,64 @@ describe("layoutGraph", () => {
     expect(byStartX.map((edge) => edge.targetId)).toEqual(["load-a", "load-c", "load-b", "load-d"]);
     expect(byStartX.map((edge) => edge.targetX)).toEqual([...byStartX.map((edge) => edge.targetX)].sort((a, b) => a - b));
   });
+
+  it("uses a strict single-column hierarchy in ultra compact stacked mode", () => {
+    const layout = fixtureUltraCompactLayout();
+    const home = getNode(layout.nodes, "home");
+    const firstSource = getNode(layout.sources, "solar");
+    const children = home.visibleChildren;
+
+    expect(layout.orientation).toBe("stacked");
+    expect(firstSource.y + firstSource.height).toBeLessThan(home.y);
+    expect(home.height).toBeLessThan(260);
+    expect(home.y + home.height).toBeLessThan(children[0].y);
+
+    for (const [index, child] of children.entries()) {
+      expect(child.x).toBe(children[0].x);
+      expect(child.width).toBe(children[0].width);
+      if (index > 0) {
+        expect(child.y).toBeGreaterThan(children[index - 1].y);
+      }
+    }
+  });
+
+  it("routes ultra compact source-to-home edges from bottom center to top center", () => {
+    const layout = fixtureUltraCompactLayout();
+    const edge = layout.edges.find((item) => item.from.id === "solar" && item.to.id === "home");
+    expect(edge).toBeDefined();
+
+    const numbers = parsePath(edgePath(edge!, "stacked"));
+    const [x1, y1, c1x, c1y, c2x, c2y, x2, y2] = numbers;
+
+    expect(x1).toBeCloseTo(edge!.from.x + edge!.from.width / 2, 5);
+    expect(y1).toBeCloseTo(edge!.from.y + edge!.from.height, 5);
+    expect(x2).toBeCloseTo(edge!.to.x + edge!.to.width / 2, 5);
+    expect(y2).toBeCloseTo(edge!.to.y, 5);
+    expect(c1x).toBe(x1);
+    expect(c2x).toBe(x2);
+    expect(c1y).toBeGreaterThan(y1);
+    expect(c2y).toBeLessThan(y2);
+  });
+
+  it("routes ultra compact child edges through a left gutter into the child side", () => {
+    const layout = fixtureUltraCompactLayout();
+    const edge = layout.edges.find((item) => item.from.id === "home" && item.to.id === "ground-floor");
+    expect(edge).toBeDefined();
+
+    const path = edgePath(edge!, "stacked");
+    const numbers = parsePath(path);
+    const [startX, startY] = numbers;
+    const endX = numbers[numbers.length - 2];
+    const endY = numbers[numbers.length - 1];
+    const leftGutterX = Math.min(...numbers.filter((_, index) => index % 2 === 0));
+
+    expect(path).toContain("Q");
+    expect(startX).toBeCloseTo(edge!.from.x + edge!.from.width / 2, 5);
+    expect(startY).toBeCloseTo(edge!.from.y + edge!.from.height, 5);
+    expect(endX).toBeCloseTo(edge!.to.x, 5);
+    expect(endY).toBeCloseTo(edge!.to.y + edge!.to.height / 2, 5);
+    expect(leftGutterX).toBeLessThan(edge!.to.x);
+  });
 });
 
 function fixtureLayout() {
@@ -243,6 +301,18 @@ function fixtureCompactGridLayout() {
     width: 520,
     height: 520,
     orientation: "vertical",
+    expandedIds: new Set(),
+    collapsedIds: new Set(),
+    defaultExpandedDepth: 2
+  });
+}
+
+function fixtureUltraCompactLayout() {
+  const graph = buildEnergyGraph(fixtureConfig(), fixtureHass(), "power");
+  return layoutGraph(graph, {
+    width: 340,
+    height: 480,
+    orientation: "stacked",
     expandedIds: new Set(),
     collapsedIds: new Set(),
     defaultExpandedDepth: 2

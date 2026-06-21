@@ -37,6 +37,13 @@ const COMPACT_NODE_HEIGHT = 64;
 const COMPACT_SOURCE_HEIGHT = 68;
 const COMPACT_ROOT_MAX_WIDTH = 300;
 const COMPACT_ROOT_HEIGHT = 300;
+const ULTRA_OUTER_PADDING = 12;
+const ULTRA_CHILD_SIDE_PADDING = 20;
+const ULTRA_SECTION_GAP = 24;
+const ULTRA_NODE_HEIGHT = 62;
+const ULTRA_SOURCE_HEIGHT = 58;
+const ULTRA_ROOT_MAX_WIDTH = 280;
+const ULTRA_ROOT_HEIGHT = 220;
 
 export function layoutGraph(graph: GraphBuildResult, options: LayoutOptions): GraphLayout {
   const width = Math.max(280, options.width);
@@ -55,7 +62,7 @@ export function layoutGraph(graph: GraphBuildResult, options: LayoutOptions): Gr
     };
   }
 
-  if (options.orientation === "vertical") {
+  if (options.orientation === "vertical" || options.orientation === "stacked") {
     const positionedTree = positionVerticalHierarchy(primaryRoot, width, sourceNodes, options);
     const primary = positionedTree.find((node) => node.id === primaryRoot.id);
     const edges = buildEdges(sourceNodes, positionedTree, primary, options.orientation);
@@ -93,6 +100,15 @@ export function edgePath(edge: PositionedEdge, orientation: NexusOrientation): s
   if (orientation === "horizontal") {
     const offset = (to.x - from.x) / 2;
     return `M ${from.x} ${from.y} C ${from.x + offset} ${from.y}, ${to.x - offset} ${to.y}, ${to.x} ${to.y}`;
+  }
+
+  if (orientation === "stacked") {
+    if (edge.from.role === "source" || edge.to.depth === 0) {
+      const offset = Math.min(28, Math.abs(to.y - from.y) * 0.42);
+      return `M ${from.x} ${from.y} C ${from.x} ${from.y + offset}, ${to.x} ${to.y - offset}, ${to.x} ${to.y}`;
+    }
+
+    return roundedStackedPath(from, to);
   }
 
   const offset = Math.abs(to.y - from.y) * 0.45;
@@ -164,6 +180,20 @@ function layoutSources(
     }));
   }
 
+  if (orientation === "stacked") {
+    const nodeWidth = Math.min(280, Math.max(COMPACT_NODE_MIN_WIDTH, width - ULTRA_OUTER_PADDING * 2));
+    const nodeHeight = ULTRA_SOURCE_HEIGHT;
+    return visibleSources.map((node, index) => ({
+      ...node,
+      x: (width - nodeWidth) / 2,
+      y: 16 + index * (nodeHeight + COMPACT_GRID_GAP),
+      width: nodeWidth,
+      height: nodeHeight,
+      depth: 0,
+      visibleChildren: []
+    }));
+  }
+
   const gap = 10;
   const availableWidth = Math.max(COMPACT_NODE_MIN_WIDTH, width - COMPACT_OUTER_PADDING * 2);
   const columns =
@@ -189,9 +219,11 @@ function positionVerticalHierarchy(
 ): PositionedNode[] {
   const nodes: PositionedNode[] = [];
   const sourceBottom = sourceNodes.length ? Math.max(...sourceNodes.map((source) => source.y + source.height)) : 20;
-  let cursorY = sourceBottom + COMPACT_SECTION_GAP;
-  const rootWidth = Math.min(COMPACT_ROOT_MAX_WIDTH, width - COMPACT_OUTER_PADDING * 2);
-  const rootHeight = COMPACT_ROOT_HEIGHT;
+  const isStacked = options.orientation === "stacked";
+  const sectionGap = isStacked ? ULTRA_SECTION_GAP : COMPACT_SECTION_GAP;
+  let cursorY = sourceBottom + sectionGap;
+  const rootWidth = Math.min(isStacked ? ULTRA_ROOT_MAX_WIDTH : COMPACT_ROOT_MAX_WIDTH, width - COMPACT_OUTER_PADDING * 2);
+  const rootHeight = isStacked ? ULTRA_ROOT_HEIGHT : COMPACT_ROOT_HEIGHT;
   const rootNode: PositionedNode = {
     ...root,
     x: (width - rootWidth) / 2,
@@ -202,7 +234,7 @@ function positionVerticalHierarchy(
     visibleChildren: []
   };
   nodes.push(rootNode);
-  cursorY += rootHeight + COMPACT_SECTION_GAP;
+  cursorY += rootHeight + sectionGap;
 
   placeCompactChildren(root, rootNode, cursorY, 1, width, options, nodes);
   return nodes;
@@ -222,11 +254,15 @@ function placeCompactChildren(
     return top;
   }
 
-  const indent = Math.min(20, Math.max(0, depth - 1) * 8);
-  const availableWidth = Math.max(COMPACT_NODE_MIN_WIDTH, width - COMPACT_CHILD_SIDE_PADDING * 2 - indent * 2);
-  const columns = availableWidth >= COMPACT_NODE_MIN_WIDTH * 2 + COMPACT_GRID_GAP ? 2 : 1;
-  const nodeWidth = Math.floor((availableWidth - COMPACT_GRID_GAP * (columns - 1)) / columns);
-  const left = (width - (nodeWidth * columns + COMPACT_GRID_GAP * (columns - 1))) / 2;
+  const isStacked = options.orientation === "stacked";
+  const gap = COMPACT_GRID_GAP;
+  const nodeHeight = isStacked ? ULTRA_NODE_HEIGHT : COMPACT_NODE_HEIGHT;
+  const indent = isStacked ? 0 : Math.min(20, Math.max(0, depth - 1) * 8);
+  const sidePadding = isStacked ? ULTRA_CHILD_SIDE_PADDING : COMPACT_CHILD_SIDE_PADDING;
+  const availableWidth = Math.max(COMPACT_NODE_MIN_WIDTH, width - sidePadding * 2 - indent * 2);
+  const columns = isStacked ? 1 : availableWidth >= COMPACT_NODE_MIN_WIDTH * 2 + gap ? 2 : 1;
+  const nodeWidth = Math.floor((availableWidth - gap * (columns - 1)) / columns);
+  const left = (width - (nodeWidth * columns + gap * (columns - 1))) / 2;
   let cursorY = top;
 
   for (let index = 0; index < children.length; index += columns) {
@@ -237,7 +273,7 @@ function placeCompactChildren(
         x: left + rowIndex * (nodeWidth + COMPACT_GRID_GAP),
         y: cursorY,
         width: nodeWidth,
-        height: COMPACT_NODE_HEIGHT,
+        height: nodeHeight,
         depth,
         visibleChildren: []
       };
@@ -246,11 +282,11 @@ function placeCompactChildren(
       return { source: child, node: childNode };
     });
 
-    cursorY += COMPACT_NODE_HEIGHT + COMPACT_GRID_GAP;
+    cursorY += nodeHeight + gap;
 
     for (const child of positionedRow) {
       if (isExpanded(child.source, options.expandedIds, options.collapsedIds, options.defaultExpandedDepth)) {
-        cursorY = placeCompactChildren(child.source, child.node, cursorY + COMPACT_GRID_GAP, depth + 1, width, options, nodes);
+        cursorY = placeCompactChildren(child.source, child.node, cursorY + gap, depth + 1, width, options, nodes);
       }
     }
   }
@@ -437,6 +473,10 @@ function sortForSlots(nodes: PositionedNode[], orientation: NexusOrientation): P
       return centerA.y - centerB.y || centerA.x - centerB.x;
     }
 
+    if (orientation === "stacked") {
+      return centerA.y - centerB.y || centerA.x - centerB.x;
+    }
+
     return centerA.x - centerB.x || centerA.y - centerB.y;
   });
 }
@@ -457,8 +497,50 @@ function anchor(
     };
   }
 
+  if (orientation === "stacked") {
+    if (side === "out") {
+      return {
+        x: node.x + node.width / 2,
+        y: node.y + node.height
+      };
+    }
+
+    if (node.depth === 0 && node.role !== "source") {
+      return {
+        x: node.x + node.width / 2,
+        y: node.y
+      };
+    }
+
+    return {
+      x: node.x,
+      y: node.y + node.height / 2
+    };
+  }
+
   return {
     x: node.x + node.width * ratio,
     y: side === "out" ? node.y + node.height : node.y
   };
+}
+
+function roundedStackedPath(from: { x: number; y: number }, to: { x: number; y: number }): string {
+  const routeX = Math.max(6, Math.min(from.x, to.x) - 14);
+  const verticalGap = Math.max(18, to.y - from.y);
+  const turnY = from.y + Math.min(22, verticalGap * 0.26);
+  const radius = Math.max(
+    2,
+    Math.min(8, Math.abs(from.x - routeX) / 2, Math.abs(to.x - routeX) / 2, Math.abs(to.y - turnY) / 3)
+  );
+
+  return [
+    `M ${from.x} ${from.y}`,
+    `L ${from.x} ${turnY - radius}`,
+    `Q ${from.x} ${turnY} ${from.x - radius} ${turnY}`,
+    `L ${routeX + radius} ${turnY}`,
+    `Q ${routeX} ${turnY} ${routeX} ${turnY + radius}`,
+    `L ${routeX} ${to.y - radius}`,
+    `Q ${routeX} ${to.y} ${routeX + radius} ${to.y}`,
+    `L ${to.x} ${to.y}`
+  ].join(" ");
 }

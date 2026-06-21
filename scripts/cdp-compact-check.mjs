@@ -50,7 +50,7 @@ const send = (method, params = {}) =>
 await send("Runtime.enable");
 await send("Page.enable");
 await send("Emulation.setDeviceMetricsOverride", {
-  width: 390,
+  width: 460,
   height: 1600,
   deviceScaleFactor: 1,
   mobile: true

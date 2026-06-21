@@ -1,5 +1,5 @@
 export type NexusMode = "power" | "energy";
-export type NexusOrientation = "horizontal" | "vertical";
+export type NexusOrientation = "horizontal" | "vertical" | "stacked";
 export type NexusNodeRole = "source" | "hub" | "load" | "rest";
 export type NexusDirection = "auto" | "import" | "export";
 export type NexusSeverity = "normal" | "warning" | "critical" | "overflow";

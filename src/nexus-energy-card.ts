@@ -21,11 +21,17 @@ const TOOLTIP_CACHE_TTL = 60_000;
 const TOOLTIP_WIDTH = 252;
 const TOOLTIP_HEIGHT = 210;
 const COMPACT_BREAKPOINT = 600;
+const ULTRA_COMPACT_BREAKPOINT = 380;
+const BREAKPOINT_HYSTERESIS = 20;
 const RESIZE_DEBOUNCE = 100;
 const WIDE_GRAPH_HEIGHT = 720;
 const COMPACT_GRAPH_HEIGHT = 520;
+const ULTRA_COMPACT_GRAPH_HEIGHT = 480;
+const WIDE_FRAME_HORIZONTAL_PADDING = 62;
+const COMPACT_FRAME_HORIZONTAL_PADDING = 26;
+const ULTRA_FRAME_HORIZONTAL_PADDING = 22;
 
-type NexusBreakpoint = "wide" | "compact";
+type NexusBreakpoint = "wide" | "compact" | "ultra-compact";
 
 interface HistoryPoint {
   time: number;
@@ -73,7 +79,7 @@ export class NexusEnergyCard extends LitElement {
   private _lastValues = new Map<string, number>();
   private _tooltipTimer?: number;
   private _resizeTimer?: number;
-  private _pendingWidth = 1180;
+  private _pendingHostWidth = 1180;
   private _tooltipRequestId = 0;
 
   public static async getConfigElement(): Promise<HTMLElement> {
@@ -130,44 +136,28 @@ export class NexusEnergyCard extends LitElement {
   }
 
   protected override firstUpdated(): void {
-    const frame = this.renderRoot.querySelector<HTMLElement>(".nexus-card-frame");
-    const resizeTarget = frame ?? this;
     if ("ResizeObserver" in window) {
       this._resizeObserver = new ResizeObserver(([entry]) => {
         this._scheduleResize(entry.contentRect.width);
       });
-      this._resizeObserver.observe(resizeTarget);
+      this._resizeObserver.observe(this);
     }
-    this._scheduleResize(this._measuredContentWidth(resizeTarget) || this._width, 0);
+    this._scheduleResize(this.getBoundingClientRect().width || this._width, 0);
   }
 
-  private _measuredContentWidth(element: Element): number {
-    const rect = element.getBoundingClientRect();
-    if (!(element instanceof HTMLElement)) {
-      return rect.width;
-    }
-
-    const style = getComputedStyle(element);
-    const padding =
-      Number.parseFloat(style.paddingLeft || "0") +
-      Number.parseFloat(style.paddingRight || "0") +
-      Number.parseFloat(style.borderLeftWidth || "0") +
-      Number.parseFloat(style.borderRightWidth || "0");
-    return Math.max(0, rect.width - padding);
-  }
-
-  private _scheduleResize(width: number, delay = RESIZE_DEBOUNCE): void {
-    if (!Number.isFinite(width) || width <= 0) {
+  private _scheduleResize(hostWidth: number, delay = RESIZE_DEBOUNCE): void {
+    if (!Number.isFinite(hostWidth) || hostWidth <= 0) {
       return;
     }
 
-    this._pendingWidth = Math.max(280, Math.round(width));
+    this._pendingHostWidth = Math.max(1, Math.round(hostWidth));
     window.clearTimeout(this._resizeTimer);
     this._resizeTimer = window.setTimeout(() => {
-      const nextWidth = this._pendingWidth;
-      const nextBreakpoint: NexusBreakpoint = nextWidth <= COMPACT_BREAKPOINT ? "compact" : "wide";
-      if (this._width !== nextWidth) {
-        this._width = nextWidth;
+      const nextHostWidth = this._pendingHostWidth;
+      const nextBreakpoint = this._nextBreakpoint(nextHostWidth);
+      const nextLayoutWidth = this._contentWidthForBreakpoint(nextHostWidth, nextBreakpoint);
+      if (this._width !== nextLayoutWidth) {
+        this._width = nextLayoutWidth;
       }
       if (this._breakpoint !== nextBreakpoint) {
         this._breakpoint = nextBreakpoint;
@@ -175,9 +165,39 @@ export class NexusEnergyCard extends LitElement {
     }, delay);
   }
 
+  private _nextBreakpoint(hostWidth: number): NexusBreakpoint {
+    if (this._breakpoint === "ultra-compact") {
+      return hostWidth >= ULTRA_COMPACT_BREAKPOINT + BREAKPOINT_HYSTERESIS ? "compact" : "ultra-compact";
+    }
+
+    if (this._breakpoint === "compact") {
+      if (hostWidth <= ULTRA_COMPACT_BREAKPOINT) {
+        return "ultra-compact";
+      }
+      return hostWidth >= COMPACT_BREAKPOINT + BREAKPOINT_HYSTERESIS ? "wide" : "compact";
+    }
+
+    if (hostWidth <= ULTRA_COMPACT_BREAKPOINT) {
+      return "ultra-compact";
+    }
+
+    return hostWidth <= COMPACT_BREAKPOINT ? "compact" : "wide";
+  }
+
+  private _contentWidthForBreakpoint(hostWidth: number, breakpoint: NexusBreakpoint): number {
+    const framePadding =
+      breakpoint === "ultra-compact"
+        ? ULTRA_FRAME_HORIZONTAL_PADDING
+        : breakpoint === "compact"
+          ? COMPACT_FRAME_HORIZONTAL_PADDING
+          : WIDE_FRAME_HORIZONTAL_PADDING;
+    return Math.max(280, Math.round(hostWidth - framePadding));
+  }
+
   protected override render() {
-    const orientation = this._breakpoint === "compact" ? "vertical" : "horizontal";
-    const graphHeight = orientation === "vertical" ? COMPACT_GRAPH_HEIGHT : WIDE_GRAPH_HEIGHT;
+    const orientation = this._breakpoint === "ultra-compact" ? "stacked" : this._breakpoint === "compact" ? "vertical" : "horizontal";
+    const graphHeight =
+      orientation === "stacked" ? ULTRA_COMPACT_GRAPH_HEIGHT : orientation === "vertical" ? COMPACT_GRAPH_HEIGHT : WIDE_GRAPH_HEIGHT;
     const layout = layoutGraph(this._graph, {
       width: this._width,
       height: graphHeight,
@@ -929,6 +949,23 @@ export class NexusEnergyCard extends LitElement {
       padding: 14px 12px 12px;
     }
 
+    .nexus-card-frame.ultra-compact {
+      --nexus-title-size: 18px;
+      --nexus-primary-metric-size: 30px;
+      --nexus-source-padding: 9px 10px;
+      --nexus-node-main-padding: 0 10px;
+      --nexus-node-main-gap: 8px;
+      --nexus-node-icon-size: 28px;
+      --nexus-node-title-size: 13px;
+      --nexus-node-value-size: 12px;
+      --nexus-root-padding: 14px;
+      --nexus-root-icon-size: 38px;
+      --nexus-root-value-size: 26px;
+      --nexus-gauge-width: 94px;
+      --nexus-gauge-height: 58px;
+      padding: 10px;
+    }
+
     .bg-transparent .nexus-card-frame {
       background: transparent;
       backdrop-filter: none;
@@ -1530,26 +1567,32 @@ export class NexusEnergyCard extends LitElement {
     }
 
     .nexus-card-frame.compact .topbar,
-    .nexus-card-frame.compact .summary-strip {
+    .nexus-card-frame.compact .summary-strip,
+    .nexus-card-frame.ultra-compact .topbar,
+    .nexus-card-frame.ultra-compact .summary-strip {
       align-items: stretch;
       flex-direction: column;
     }
 
-    .nexus-card-frame.compact .topbar {
+    .nexus-card-frame.compact .topbar,
+    .nexus-card-frame.ultra-compact .topbar {
       gap: 12px;
       margin-bottom: 14px;
     }
 
-    .nexus-card-frame.compact .brand {
+    .nexus-card-frame.compact .brand,
+    .nexus-card-frame.ultra-compact .brand {
       gap: 10px;
     }
 
-    .nexus-card-frame.compact .brand p {
+    .nexus-card-frame.compact .brand p,
+    .nexus-card-frame.ultra-compact .brand p {
       margin-top: 8px;
       font-size: 11px;
     }
 
-    .nexus-card-frame.compact .health-pill {
+    .nexus-card-frame.compact .health-pill,
+    .nexus-card-frame.ultra-compact .health-pill {
       align-self: flex-start;
       min-height: 38px;
     }
@@ -1559,20 +1602,30 @@ export class NexusEnergyCard extends LitElement {
       margin-top: 10px;
     }
 
-    .nexus-card-frame.compact .node-main {
+    .nexus-card-frame.ultra-compact .graph-stage {
+      min-height: 480px;
+      margin-top: 8px;
+    }
+
+    .nexus-card-frame.compact .node-main,
+    .nexus-card-frame.ultra-compact .node-main {
       grid-template-columns: var(--nexus-node-icon-size) minmax(0, 1fr) auto;
     }
 
     .nexus-card-frame.compact .flow-node.role-source .source-meta,
-    .nexus-card-frame.compact .flow-node.role-source .sparkline {
+    .nexus-card-frame.compact .flow-node.role-source .sparkline,
+    .nexus-card-frame.ultra-compact .flow-node.role-source .source-meta,
+    .nexus-card-frame.ultra-compact .flow-node.role-source .sparkline {
       display: none;
     }
 
-    .nexus-card-frame.compact .root-title {
+    .nexus-card-frame.compact .root-title,
+    .nexus-card-frame.ultra-compact .root-title {
       font-size: 16px;
     }
 
-    .nexus-card-frame.compact .root-subtitle {
+    .nexus-card-frame.compact .root-subtitle,
+    .nexus-card-frame.ultra-compact .root-subtitle {
       font-size: 12px;
     }
 
@@ -1580,12 +1633,26 @@ export class NexusEnergyCard extends LitElement {
       margin: 14px auto 10px;
     }
 
+    .nexus-card-frame.ultra-compact .gauge {
+      margin: 10px auto 0;
+    }
+
     .nexus-card-frame.compact .gauge span {
       font-size: 23px;
     }
 
+    .nexus-card-frame.ultra-compact .gauge span {
+      margin-top: 10px;
+      font-size: 20px;
+    }
+
     .nexus-card-frame.compact .gauge small {
       font-size: 10px;
+    }
+
+    .nexus-card-frame.ultra-compact .gauge small {
+      bottom: 6px;
+      font-size: 9px;
     }
 
     .nexus-card-frame.compact .root-stats {
@@ -1595,6 +1662,10 @@ export class NexusEnergyCard extends LitElement {
 
     .nexus-card-frame.compact .root-stats div {
       font-size: 12px;
+    }
+
+    .nexus-card-frame.ultra-compact .root-stats {
+      display: none;
     }
   `;
 }

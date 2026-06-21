@@ -105,6 +105,10 @@ const result = await send("Runtime.evaluate", {
         scaleInput.max === '150' &&
         scaleInput.step === '5' &&
         scaleInput.value === '100';
+      const hasTechnicalEntityFields =
+        root.textContent.includes('Entidad de voltaje') &&
+        root.textContent.includes('Entidad de frecuencia') &&
+        root.textContent.includes('Entidad de factor de potencia');
       const parentSelect = root.querySelector('.node-form select');
       const selectStyle = parentSelect ? getComputedStyle(parentSelect) : undefined;
       const selectedOption = parentSelect ? [...parentSelect.options].find((option) => option.selected) : undefined;
@@ -167,6 +171,7 @@ const result = await send("Runtime.evaluate", {
           hasIconPicker &&
           hasLanguageSelect &&
           hasScaleSlider &&
+          hasTechnicalEntityFields &&
           selectContrast >= 4.5 &&
           selectedOptionContrast >= 4.5 &&
           normalOptionContrast >= 4.5 &&
@@ -191,6 +196,7 @@ const result = await send("Runtime.evaluate", {
         hasIconPicker,
         hasLanguageSelect,
         hasScaleSlider,
+        hasTechnicalEntityFields,
         selectContrast,
         selectedOptionContrast,
         normalOptionContrast,

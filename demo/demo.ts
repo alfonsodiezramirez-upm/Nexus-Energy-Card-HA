@@ -31,6 +31,13 @@ import "../src/index";
 import { DEFAULT_CONFIG, EMPTY_CONFIG } from "../src/default-config";
 import type { HomeAssistantLike } from "../src/types";
 
+const DEMO_CONFIG = {
+  ...DEFAULT_CONFIG,
+  voltage_entity: "sensor.home_voltage",
+  frequency_entity: "sensor.grid_frequency",
+  power_factor_entity: "sensor.home_power_factor"
+};
+
 const ICONS = new Map<string, string>([
   ["mdi:alert-circle-outline", mdiAlertCircleOutline],
   ["mdi:bathtub-outline", mdiBathtubOutline],
@@ -195,7 +202,7 @@ export class NexusDemoApp extends LitElement {
   private _syncChild(): void {
     const card = this.renderRoot.querySelector("nexus-energy-card");
     if (card && !this._cardConfigured) {
-      card.setConfig(DEFAULT_CONFIG);
+      card.setConfig(DEMO_CONFIG);
       this._cardConfigured = true;
     }
     if (card) {
@@ -204,7 +211,7 @@ export class NexusDemoApp extends LitElement {
 
     const editor = this.renderRoot.querySelector("nexus-energy-card-editor");
     if (editor && !this._editorConfigured) {
-      editor.setConfig(new URLSearchParams(window.location.search).has("demo") ? DEFAULT_CONFIG : EMPTY_CONFIG);
+      editor.setConfig(new URLSearchParams(window.location.search).has("demo") ? DEMO_CONFIG : EMPTY_CONFIG);
       this._editorConfigured = true;
     }
     if (editor) {
@@ -250,6 +257,9 @@ function createHass(tick: number): HomeAssistantLike {
     main_bedroom_power: 400,
     bedroom_2_power: 350,
     bathroom_power: 250,
+    home_voltage: 230 + Math.sin(tick / 9000) * 1.2,
+    grid_frequency: 50 + Math.cos(tick / 11000) * 0.03,
+    home_power_factor: 0.97,
     solar_energy_today: 22.4,
     battery_energy_today: 4.6,
     grid_energy_today: 0.8,
@@ -270,16 +280,19 @@ function createHass(tick: number): HomeAssistantLike {
   const states: HomeAssistantLike["states"] = {};
   for (const [key, value] of Object.entries(values)) {
     const isEnergy = key.includes("energy");
+    const isVoltage = key.includes("voltage");
+    const isFrequency = key.includes("frequency");
+    const isPowerFactor = key.includes("power_factor");
     states[`sensor.${key}`] = {
       entity_id: `sensor.${key}`,
-      state: value.toFixed(isEnergy ? 2 : 0),
+      state: value.toFixed(isEnergy || isFrequency || isPowerFactor ? 2 : 0),
       attributes: {
         friendly_name: key
           .split("_")
           .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
           .join(" "),
-        device_class: isEnergy ? "energy" : "power",
-        unit_of_measurement: isEnergy ? "kWh" : "W"
+        device_class: isEnergy ? "energy" : isVoltage ? "voltage" : isFrequency ? "frequency" : isPowerFactor ? "power_factor" : "power",
+        unit_of_measurement: isEnergy ? "kWh" : isVoltage ? "V" : isFrequency ? "Hz" : isPowerFactor ? "" : "W"
       }
     };
   }

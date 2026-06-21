@@ -66,8 +66,25 @@ const result = await send("Runtime.evaluate", {
       await new Promise((resolve) => setTimeout(resolve, 320));
       await card.updateComplete;
       const tooltipVisible = Boolean(root.querySelector('.tooltip'));
+      const rootStatsVisible = Boolean(root.querySelector('.root-stats')) && root.textContent.includes('Voltage') && root.textContent.includes('Frequency');
 
-      return { ok: modeControlsRemoved && kitchenExpanded && tooltipVisible, modeControlsRemoved, kitchenExpanded, tooltipVisible };
+      card.setConfig({
+        ...card._config,
+        voltage_entity: undefined,
+        frequency_entity: undefined,
+        power_factor_entity: undefined
+      });
+      await card.updateComplete;
+      const rootStatsHiddenWhenUnset = !root.querySelector('.root-stats');
+
+      return {
+        ok: modeControlsRemoved && kitchenExpanded && tooltipVisible && rootStatsVisible && rootStatsHiddenWhenUnset,
+        modeControlsRemoved,
+        kitchenExpanded,
+        tooltipVisible,
+        rootStatsVisible,
+        rootStatsHiddenWhenUnset
+      };
     })()
   `
 });

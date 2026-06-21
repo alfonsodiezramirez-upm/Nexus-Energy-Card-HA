@@ -377,6 +377,8 @@ export class NexusEnergyCard extends LitElement {
   }
 
   private _renderRootNode(node: PositionedNode, solarBalance: number, hasSolarSource: boolean) {
+    const rootStats = this._rootStats();
+
     return html`
       <div class="root-heading">
         <span class="node-icon root-icon"><ha-icon icon=${node.icon}></ha-icon></span>
@@ -391,12 +393,48 @@ export class NexusEnergyCard extends LitElement {
         <span>${Math.round(solarBalance * 100)}%</span>
         <small>${this._t("solarAutonomy")}</small>
       </div>
-      <dl class="root-stats">
-        <div><dt>${this._t("voltage")}</dt><dd>230 V</dd></div>
-        <div><dt>${this._t("frequency")}</dt><dd>50.0 Hz</dd></div>
-        <div><dt>${this._t("powerFactor")}</dt><dd>0.97</dd></div>
-      </dl>
+      ${rootStats.length
+        ? html`
+            <dl class="root-stats">
+              ${rootStats.map((stat) => html`<div><dt>${stat.label}</dt><dd>${stat.value}</dd></div>`)}
+            </dl>
+          `
+        : nothing}
     `;
+  }
+
+  private _rootStats(): Array<{ label: string; value: string }> {
+    return [
+      this._entityStat(this._config.voltage_entity, this._t("voltage")),
+      this._entityStat(this._config.frequency_entity, this._t("frequency")),
+      this._entityStat(this._config.power_factor_entity, this._t("powerFactor"))
+    ].filter((stat): stat is { label: string; value: string } => Boolean(stat));
+  }
+
+  private _entityStat(entityId: string | undefined, label: string): { label: string; value: string } | undefined {
+    const normalizedEntityId = entityId?.trim();
+    if (!normalizedEntityId) {
+      return undefined;
+    }
+
+    const state = this._hass?.states[normalizedEntityId];
+    if (!state) {
+      return undefined;
+    }
+
+    const rawState = String(state.state ?? "").trim();
+    if (!rawState) {
+      return undefined;
+    }
+
+    const parsed = Number.parseFloat(rawState.replace(",", "."));
+    const formattedValue = Number.isFinite(parsed) ? formatRawNumber(parsed) : rawState;
+    const unit = String(state.attributes.unit_of_measurement ?? "").trim();
+
+    return {
+      label,
+      value: `${formattedValue} ${unit}`.trim()
+    };
   }
 
   private _renderCompactNode(node: PositionedNode) {

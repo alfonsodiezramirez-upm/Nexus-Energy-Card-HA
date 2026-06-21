@@ -76,7 +76,8 @@ export class NexusEnergyCardEditor extends LitElement {
   }
 
   protected override render() {
-    const entities = this._filteredEntities();
+    const entities = this._filteredEntities(["power"]);
+    const technicalEntities = this._filteredEntities();
     const mainNode = this._mainNode();
 
     return html`
@@ -92,8 +93,11 @@ export class NexusEnergyCardEditor extends LitElement {
         <datalist id="nexus-entities">
           ${entities.map((entity) => html`<option value=${entity.entity_id}>${entity.label}</option>`)}
         </datalist>
+        <datalist id="nexus-technical-entities">
+          ${technicalEntities.map((entity) => html`<option value=${entity.entity_id}>${entity.label}</option>`)}
+        </datalist>
 
-        ${this._renderGeneral(mainNode, entities)}
+        ${this._renderGeneral(mainNode, entities, technicalEntities)}
         ${this._renderBuilder(mainNode, entities)}
         ${this._renderAppearance()}
         ${this._renderThresholds(mainNode)}
@@ -101,7 +105,7 @@ export class NexusEnergyCardEditor extends LitElement {
     `;
   }
 
-  private _renderGeneral(mainNode: NexusEnergyNodeConfig, entities: EntityOption[]) {
+  private _renderGeneral(mainNode: NexusEnergyNodeConfig, entities: EntityOption[], technicalEntities: EntityOption[]) {
     return html`
       <section class="panel">
         <div class="panel-head">
@@ -124,6 +128,27 @@ export class NexusEnergyCardEditor extends LitElement {
           </label>
           ${this._renderEntityField("Entidad de la Casa", mainNode.entity ?? mainNode.power_entity ?? "", entities, (entityId) =>
             this._patchMain(this._entityPatch(entityId))
+          )}
+          ${this._renderEntityField(
+            "Entidad de voltaje",
+            this._config.voltage_entity ?? "",
+            technicalEntities,
+            (entityId) => this._patchConfig("voltage_entity", optionalEntity(entityId)),
+            { listId: "nexus-technical-entities", note: "opcional" }
+          )}
+          ${this._renderEntityField(
+            "Entidad de frecuencia",
+            this._config.frequency_entity ?? "",
+            technicalEntities,
+            (entityId) => this._patchConfig("frequency_entity", optionalEntity(entityId)),
+            { listId: "nexus-technical-entities", note: "opcional" }
+          )}
+          ${this._renderEntityField(
+            "Entidad de factor de potencia",
+            this._config.power_factor_entity ?? "",
+            technicalEntities,
+            (entityId) => this._patchConfig("power_factor_entity", optionalEntity(entityId)),
+            { listId: "nexus-technical-entities", note: "opcional" }
           )}
           <label>
             Tolerancia de desbordamiento (%)
@@ -400,17 +425,26 @@ export class NexusEnergyCardEditor extends LitElement {
     `;
   }
 
-  private _renderEntityField(label: string, value: string, entities: EntityOption[], onChange: (entityId: string) => void) {
+  private _renderEntityField(
+    label: string,
+    value: string,
+    entities: EntityOption[],
+    onChange: (entityId: string) => void,
+    options: { listId?: string; note?: string } = {}
+  ) {
+    const listId = options.listId ?? "nexus-entities";
+    const note = options.note ?? "sensor power";
+
     return html`
       <label>
         ${label}
         <input
-          list="nexus-entities"
+          list=${listId}
           .value=${value}
           @input=${(event: Event) => onChange(cleanText(valueOf(event)))}
           placeholder="sensor..."
         />
-        ${entities.length ? nothing : html`<span class="field-note">sensor power</span>`}
+        ${entities.length ? nothing : html`<span class="field-note">${note}</span>`}
       </label>
     `;
   }
@@ -438,13 +472,14 @@ export class NexusEnergyCardEditor extends LitElement {
     `;
   }
 
-  private _filteredEntities(): EntityOption[] {
+  private _filteredEntities(deviceClasses?: string[]): EntityOption[] {
+    const allowedClasses = deviceClasses ? new Set(deviceClasses) : undefined;
     const states = Object.values(this._hass?.states ?? {});
     return states
       .filter((state) => {
         const entity = state.entity_id;
         const deviceClass = String(state.attributes.device_class ?? "");
-        return entity.startsWith("sensor.") && deviceClass === "power";
+        return entity.startsWith("sensor.") && (!allowedClasses || allowedClasses.has(deviceClass));
       })
       .map((state) => ({
         entity_id: state.entity_id,
@@ -1178,6 +1213,11 @@ function optionalNumber(value: string): number | undefined {
   }
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function optionalEntity(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed || undefined;
 }
 
 function clampPercentage(value: unknown): number {

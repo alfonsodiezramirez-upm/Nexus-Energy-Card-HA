@@ -68,6 +68,9 @@ export interface NexusEnergyCardConfig {
   visual_scale?: number;
   overflow_tolerance?: number;
   language?: NexusLanguage;
+  voltage_entity?: string;
+  frequency_entity?: string;
+  power_factor_entity?: string;
   background_style?: NexusBackgroundStyle;
   hide_zero_nodes?: boolean;
   base_color?: string;

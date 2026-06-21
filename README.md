@@ -145,7 +145,7 @@ The visual editor is the recommended setup path. New cards start empty, so no mo
 
 The editor includes:
 
-- General card title and main home entity settings.
+- General card title, main home entity, and optional voltage/frequency/power-factor entity settings.
 - Overflow tolerance.
 - Node tree builder with collapsible rows.
 - Source and consumer node creation.
@@ -166,6 +166,9 @@ line_width_base: 1.5
 visual_scale: 1
 overflow_tolerance: 5
 language: auto
+voltage_entity: sensor.home_voltage
+frequency_entity: sensor.grid_frequency
+power_factor_entity: sensor.home_power_factor
 background_style: glass
 hide_zero_nodes: false
 base_color: "#38a5ff"
@@ -235,6 +238,9 @@ nodes:
 | `visual_scale` | number | `1` | Global visual scale factor. Use `0.5` to `1.5`. |
 | `overflow_tolerance` | number | `5` | Percentage margin used to ignore small child-over-parent sensor mismatches. |
 | `language` | `auto`, `en`, `es`, `zh`, `fr`, `de`, `hi`, `it`, `ru` | `auto` | Interface language. `auto` follows `hass.language`. |
+| `voltage_entity` | entity ID | unset | Optional sensor shown in the main home node stats. Hidden when unset. |
+| `frequency_entity` | entity ID | unset | Optional sensor shown in the main home node stats. Hidden when unset. |
+| `power_factor_entity` | entity ID | unset | Optional sensor shown in the main home node stats. Hidden when unset. |
 | `background_style` | `glass`, `transparent`, `solid` | `glass` | Card background treatment. |
 | `hide_zero_nodes` | boolean | `false` | Hides zero-value sources and devices. |
 | `base_color` | color string | `#38a5ff` | Default flow and node accent color. |

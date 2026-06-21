@@ -13,8 +13,10 @@ Nexus Energy Card is a Home Assistant Lovelace dashboard card for visualizing li
 - HACS-compatible Dashboard plugin structure.
 - Live power-focused UI with source -> home -> consumer routing.
 - Strict hierarchical layout with centered parent nodes and aligned child columns.
-- Calculated remainder nodes, currently displayed as `Resto [node]`, when a parent reports more power than its configured children.
+- Calculated, localized remainder nodes when a parent reports more power than its configured children.
 - Configurable overflow tolerance to absorb small real-time sensor synchronization mismatches.
+- Global visual scale from 50% to 150% for dense dashboards or large wall panels.
+- Built-in interface translations for English, Spanish, Chinese, French, German, Hindi, Italian, and Russian.
 - Proportional SVG flow widths, animated particles, and warning/critical styling.
 - Clean Bezier routing on desktop and compact views, plus an ultra-compact single-column mobile layout.
 - Hover/tap tooltip with current value, parent percentage, and cached Home Assistant history sparkline.
@@ -148,8 +150,9 @@ The editor includes:
 - Node tree builder with collapsible rows.
 - Source and consumer node creation.
 - Parent selection for each node.
-- Entity picker, display name, MDI icon, direction, capacity, and invert value.
-- Appearance controls for line width, animation speed, background style, base color, zero-value node hiding, and default expanded depth.
+- Entity picker, display name, native Home Assistant MDI icon picker, direction, capacity, and invert value.
+- Appearance controls for line width, global visual scale, animation speed, background style, base color, zero-value node hiding, and default expanded depth.
+- Manual interface language selector, with automatic Home Assistant language detection by default.
 - Per-node or global color thresholds.
 
 ## Full YAML example
@@ -160,7 +163,9 @@ title: Nexus Energy
 animation: true
 animation_speed: 1
 line_width_base: 1.5
+visual_scale: 1
 overflow_tolerance: 5
+language: auto
 background_style: glass
 hide_zero_nodes: false
 base_color: "#38a5ff"
@@ -227,7 +232,9 @@ nodes:
 | `animation` | boolean | `true` | Enables moving particles on power flows. |
 | `animation_speed` | number | `1` | Particle speed multiplier. |
 | `line_width_base` | number | `1.5` | Minimum flow width used by proportional paths. |
+| `visual_scale` | number | `1` | Global visual scale factor. Use `0.5` to `1.5`. |
 | `overflow_tolerance` | number | `5` | Percentage margin used to ignore small child-over-parent sensor mismatches. |
+| `language` | `auto`, `en`, `es`, `zh`, `fr`, `de`, `hi`, `it`, `ru` | `auto` | Interface language. `auto` follows `hass.language`. |
 | `background_style` | `glass`, `transparent`, `solid` | `glass` | Card background treatment. |
 | `hide_zero_nodes` | boolean | `false` | Hides zero-value sources and devices. |
 | `base_color` | color string | `#38a5ff` | Default flow and node accent color. |
@@ -288,6 +295,26 @@ Example:
 ```yaml
 overflow_tolerance: 5
 ```
+
+### Visual scale
+
+`visual_scale` resizes the card geometry, typography, spacing, flow widths, and tooltip sizing together.
+
+```yaml
+visual_scale: 0.75
+```
+
+Supported range: `0.5` to `1.5`.
+
+### Interface language
+
+`language: auto` follows the Home Assistant interface language. You can also pin a language manually:
+
+```yaml
+language: es
+```
+
+Supported values: `en`, `es`, `zh`, `fr`, `de`, `hi`, `it`, and `ru`.
 
 If children exceed the parent by 5% or less, the overflow is ignored and the remainder is treated as `0 W`.
 

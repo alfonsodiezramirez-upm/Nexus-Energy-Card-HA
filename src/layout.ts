@@ -16,6 +16,37 @@ interface LayoutOptions {
   collapsedIds: Set<string>;
   defaultExpandedDepth: number;
   hideZeroNodes?: boolean;
+  scale?: number;
+}
+
+interface LayoutMetrics {
+  scale: number;
+  deviceNodeWidth: number;
+  deviceNodeHeight: number;
+  sourceNodeMinWidth: number;
+  sourceNodeMaxWidth: number;
+  rootNodeWidth: number;
+  rootNodeHeight: number;
+  horizontalColumnGap: number;
+  horizontalSiblingGap: number;
+  horizontalGroupGap: number;
+  horizontalSourceGap: number;
+  compactOuterPadding: number;
+  compactChildSidePadding: number;
+  compactGridGap: number;
+  compactSectionGap: number;
+  compactNodeMinWidth: number;
+  compactNodeHeight: number;
+  compactSourceHeight: number;
+  compactRootMaxWidth: number;
+  compactRootHeight: number;
+  ultraOuterPadding: number;
+  ultraChildSidePadding: number;
+  ultraSectionGap: number;
+  ultraNodeHeight: number;
+  ultraSourceHeight: number;
+  ultraRootMaxWidth: number;
+  ultraRootHeight: number;
 }
 
 const DEVICE_NODE_WIDTH = 228;
@@ -45,10 +76,46 @@ const ULTRA_SOURCE_HEIGHT = 44;
 const ULTRA_ROOT_MAX_WIDTH = 210;
 const ULTRA_ROOT_HEIGHT = 165;
 
+function layoutMetrics(value: unknown): LayoutMetrics {
+  const parsed = Number(value);
+  const scale = Number.isFinite(parsed) ? clamp(parsed, 0.5, 1.5) : 1;
+
+  return {
+    scale,
+    deviceNodeWidth: DEVICE_NODE_WIDTH * scale,
+    deviceNodeHeight: DEVICE_NODE_HEIGHT * scale,
+    sourceNodeMinWidth: SOURCE_NODE_MIN_WIDTH * scale,
+    sourceNodeMaxWidth: SOURCE_NODE_MAX_WIDTH * scale,
+    rootNodeWidth: ROOT_NODE_WIDTH * scale,
+    rootNodeHeight: ROOT_NODE_HEIGHT * scale,
+    horizontalColumnGap: HORIZONTAL_COLUMN_GAP * scale,
+    horizontalSiblingGap: HORIZONTAL_SIBLING_GAP * scale,
+    horizontalGroupGap: HORIZONTAL_GROUP_GAP * scale,
+    horizontalSourceGap: HORIZONTAL_SOURCE_GAP * scale,
+    compactOuterPadding: COMPACT_OUTER_PADDING * scale,
+    compactChildSidePadding: COMPACT_CHILD_SIDE_PADDING * scale,
+    compactGridGap: COMPACT_GRID_GAP * scale,
+    compactSectionGap: COMPACT_SECTION_GAP * scale,
+    compactNodeMinWidth: COMPACT_NODE_MIN_WIDTH * scale,
+    compactNodeHeight: COMPACT_NODE_HEIGHT * scale,
+    compactSourceHeight: COMPACT_SOURCE_HEIGHT * scale,
+    compactRootMaxWidth: COMPACT_ROOT_MAX_WIDTH * scale,
+    compactRootHeight: COMPACT_ROOT_HEIGHT * scale,
+    ultraOuterPadding: ULTRA_OUTER_PADDING * scale,
+    ultraChildSidePadding: ULTRA_CHILD_SIDE_PADDING * scale,
+    ultraSectionGap: ULTRA_SECTION_GAP * scale,
+    ultraNodeHeight: ULTRA_NODE_HEIGHT * scale,
+    ultraSourceHeight: ULTRA_SOURCE_HEIGHT * scale,
+    ultraRootMaxWidth: ULTRA_ROOT_MAX_WIDTH * scale,
+    ultraRootHeight: ULTRA_ROOT_HEIGHT * scale
+  };
+}
+
 export function layoutGraph(graph: GraphBuildResult, options: LayoutOptions): GraphLayout {
+  const metrics = layoutMetrics(options.scale);
   const width = Math.max(280, options.width);
-  const height = Math.max(390, options.height);
-  const sourceNodes = layoutSources(graph.sources, width, height, options.orientation, options.hideZeroNodes ?? false);
+  const height = Math.max(390 * metrics.scale, options.height);
+  const sourceNodes = layoutSources(graph.sources, width, height, options.orientation, options.hideZeroNodes ?? false, metrics);
   const primaryRoot = graph.primaryRoot;
 
   if (!primaryRoot) {
@@ -63,14 +130,14 @@ export function layoutGraph(graph: GraphBuildResult, options: LayoutOptions): Gr
   }
 
   if (options.orientation === "vertical" || options.orientation === "stacked") {
-    const positionedTree = positionVerticalHierarchy(primaryRoot, width, sourceNodes, options);
+    const positionedTree = positionVerticalHierarchy(primaryRoot, width, sourceNodes, options, metrics);
     const primary = positionedTree.find((node) => node.id === primaryRoot.id);
     const edges = buildEdges(sourceNodes, positionedTree, primary, options.orientation);
 
     return {
       orientation: options.orientation,
       width,
-      height: Math.max(height, Math.max(...positionedTree.map((node) => node.y + node.height + 24), 0)),
+      height: Math.max(height, Math.max(...positionedTree.map((node) => node.y + node.height + 24 * metrics.scale), 0)),
       nodes: [...sourceNodes, ...positionedTree],
       sources: sourceNodes,
       primaryRoot: primary,
@@ -78,14 +145,14 @@ export function layoutGraph(graph: GraphBuildResult, options: LayoutOptions): Gr
     };
   }
 
-  const positionedTree = positionHorizontalHierarchy(primaryRoot, width, height, sourceNodes, options);
+  const positionedTree = positionHorizontalHierarchy(primaryRoot, width, height, sourceNodes, options, metrics);
   const primary = positionedTree.find((node) => node.id === primaryRoot.id);
   const edges = buildEdges(sourceNodes, positionedTree, primary, options.orientation);
 
   return {
     orientation: options.orientation,
     width,
-    height: Math.max(height, Math.max(...positionedTree.map((node) => node.y + node.height + 24), 0)),
+    height: Math.max(height, Math.max(...positionedTree.map((node) => node.y + node.height + 24 * metrics.scale), 0)),
     nodes: [...sourceNodes, ...positionedTree],
     sources: sourceNodes,
     primaryRoot: primary,
@@ -159,19 +226,20 @@ function layoutSources(
   width: number,
   height: number,
   orientation: NexusOrientation,
-  hideZeroNodes: boolean
+  hideZeroNodes: boolean,
+  metrics: LayoutMetrics
 ): PositionedNode[] {
   const visibleSources = hideZeroNodes ? sources.filter((source) => source.value > 0.001) : sources;
 
   if (orientation === "horizontal") {
-    const nodeWidth = Math.min(SOURCE_NODE_MAX_WIDTH, Math.max(SOURCE_NODE_MIN_WIDTH, width * 0.16));
-    const nodeHeight = 84;
-    const gap = HORIZONTAL_SOURCE_GAP;
+    const nodeWidth = Math.min(metrics.sourceNodeMaxWidth, Math.max(metrics.sourceNodeMinWidth, width * 0.16));
+    const nodeHeight = 84 * metrics.scale;
+    const gap = metrics.horizontalSourceGap;
     const totalHeight = visibleSources.length * nodeHeight + Math.max(0, visibleSources.length - 1) * gap;
-    const startY = Math.max(87, (height - totalHeight) / 2);
+    const startY = Math.max(87 * metrics.scale, (height - totalHeight) / 2);
     return visibleSources.map((node, index) => ({
       ...node,
-      x: 24,
+      x: 24 * metrics.scale,
       y: startY + index * (nodeHeight + gap),
       width: nodeWidth,
       height: nodeHeight,
@@ -181,12 +249,12 @@ function layoutSources(
   }
 
   if (orientation === "stacked") {
-    const nodeWidth = Math.min(210, Math.max(COMPACT_NODE_MIN_WIDTH, width - ULTRA_OUTER_PADDING * 2));
-    const nodeHeight = ULTRA_SOURCE_HEIGHT;
+    const nodeWidth = Math.min(210 * metrics.scale, Math.max(metrics.compactNodeMinWidth, width - metrics.ultraOuterPadding * 2));
+    const nodeHeight = metrics.ultraSourceHeight;
     return visibleSources.map((node, index) => ({
       ...node,
       x: (width - nodeWidth) / 2,
-      y: 16 + index * (nodeHeight + COMPACT_GRID_GAP),
+      y: 16 * metrics.scale + index * (nodeHeight + metrics.compactGridGap),
       width: nodeWidth,
       height: nodeHeight,
       depth: 0,
@@ -194,16 +262,16 @@ function layoutSources(
     }));
   }
 
-  const gap = 10;
-  const availableWidth = Math.max(COMPACT_NODE_MIN_WIDTH, width - COMPACT_OUTER_PADDING * 2);
+  const gap = 10 * metrics.scale;
+  const availableWidth = Math.max(metrics.compactNodeMinWidth, width - metrics.compactOuterPadding * 2);
   const columns =
-    availableWidth >= COMPACT_NODE_MIN_WIDTH * 2 + gap ? Math.min(2, Math.max(1, visibleSources.length)) : 1;
+    availableWidth >= metrics.compactNodeMinWidth * 2 + gap ? Math.min(2, Math.max(1, visibleSources.length)) : 1;
   const nodeWidth = Math.floor((availableWidth - gap * (columns - 1)) / columns);
-  const nodeHeight = COMPACT_SOURCE_HEIGHT;
+  const nodeHeight = metrics.compactSourceHeight;
   return visibleSources.map((node, index) => ({
     ...node,
-    x: columns === 1 ? (width - nodeWidth) / 2 : COMPACT_OUTER_PADDING + (index % columns) * (nodeWidth + gap),
-    y: 20 + Math.floor(index / columns) * (nodeHeight + gap),
+    x: columns === 1 ? (width - nodeWidth) / 2 : metrics.compactOuterPadding + (index % columns) * (nodeWidth + gap),
+    y: 20 * metrics.scale + Math.floor(index / columns) * (nodeHeight + gap),
     width: nodeWidth,
     height: nodeHeight,
     depth: 0,
@@ -215,15 +283,17 @@ function positionVerticalHierarchy(
   root: GraphNode,
   width: number,
   sourceNodes: PositionedNode[],
-  options: LayoutOptions
+  options: LayoutOptions,
+  metrics: LayoutMetrics
 ): PositionedNode[] {
   const nodes: PositionedNode[] = [];
-  const sourceBottom = sourceNodes.length ? Math.max(...sourceNodes.map((source) => source.y + source.height)) : 20;
+  const sourceBottom = sourceNodes.length ? Math.max(...sourceNodes.map((source) => source.y + source.height)) : 20 * metrics.scale;
   const isStacked = options.orientation === "stacked";
-  const sectionGap = isStacked ? ULTRA_SECTION_GAP : COMPACT_SECTION_GAP;
+  const sectionGap = isStacked ? metrics.ultraSectionGap : metrics.compactSectionGap;
   let cursorY = sourceBottom + sectionGap;
-  const rootWidth = Math.min(isStacked ? ULTRA_ROOT_MAX_WIDTH : COMPACT_ROOT_MAX_WIDTH, width - COMPACT_OUTER_PADDING * 2);
-  const rootHeight = isStacked ? ULTRA_ROOT_HEIGHT : COMPACT_ROOT_HEIGHT;
+  const outerPadding = isStacked ? metrics.ultraOuterPadding : metrics.compactOuterPadding;
+  const rootWidth = Math.min(isStacked ? metrics.ultraRootMaxWidth : metrics.compactRootMaxWidth, width - outerPadding * 2);
+  const rootHeight = isStacked ? metrics.ultraRootHeight : metrics.compactRootHeight;
   const rootNode: PositionedNode = {
     ...root,
     x: (width - rootWidth) / 2,
@@ -236,7 +306,7 @@ function positionVerticalHierarchy(
   nodes.push(rootNode);
   cursorY += rootHeight + sectionGap;
 
-  placeCompactChildren(root, rootNode, cursorY, 1, width, options, nodes);
+  placeCompactChildren(root, rootNode, cursorY, 1, width, options, nodes, metrics);
   return nodes;
 }
 
@@ -247,7 +317,8 @@ function placeCompactChildren(
   depth: number,
   width: number,
   options: LayoutOptions,
-  nodes: PositionedNode[]
+  nodes: PositionedNode[],
+  metrics: LayoutMetrics
 ): number {
   const children = visibleChildren(source, options);
   if (children.length === 0) {
@@ -255,12 +326,12 @@ function placeCompactChildren(
   }
 
   const isStacked = options.orientation === "stacked";
-  const gap = COMPACT_GRID_GAP;
-  const nodeHeight = isStacked ? ULTRA_NODE_HEIGHT : COMPACT_NODE_HEIGHT;
-  const indent = isStacked ? 0 : Math.min(20, Math.max(0, depth - 1) * 8);
-  const sidePadding = isStacked ? ULTRA_CHILD_SIDE_PADDING : COMPACT_CHILD_SIDE_PADDING;
-  const availableWidth = Math.max(COMPACT_NODE_MIN_WIDTH, width - sidePadding * 2 - indent * 2);
-  const columns = isStacked ? 1 : availableWidth >= COMPACT_NODE_MIN_WIDTH * 2 + gap ? 2 : 1;
+  const gap = metrics.compactGridGap;
+  const nodeHeight = isStacked ? metrics.ultraNodeHeight : metrics.compactNodeHeight;
+  const indent = isStacked ? 0 : Math.min(20 * metrics.scale, Math.max(0, depth - 1) * 8 * metrics.scale);
+  const sidePadding = isStacked ? metrics.ultraChildSidePadding : metrics.compactChildSidePadding;
+  const availableWidth = Math.max(metrics.compactNodeMinWidth, width - sidePadding * 2 - indent * 2);
+  const columns = isStacked ? 1 : availableWidth >= metrics.compactNodeMinWidth * 2 + gap ? 2 : 1;
   const nodeWidth = Math.floor((availableWidth - gap * (columns - 1)) / columns);
   const left = (width - (nodeWidth * columns + gap * (columns - 1))) / 2;
   let cursorY = top;
@@ -270,7 +341,7 @@ function placeCompactChildren(
     const positionedRow = rowChildren.map((child, rowIndex) => {
       const childNode: PositionedNode = {
         ...child,
-        x: left + rowIndex * (nodeWidth + COMPACT_GRID_GAP),
+        x: left + rowIndex * (nodeWidth + gap),
         y: cursorY,
         width: nodeWidth,
         height: nodeHeight,
@@ -286,7 +357,7 @@ function placeCompactChildren(
 
     for (const child of positionedRow) {
       if (isExpanded(child.source, options.expandedIds, options.collapsedIds, options.defaultExpandedDepth)) {
-        cursorY = placeCompactChildren(child.source, child.node, cursorY + gap, depth + 1, width, options, nodes);
+        cursorY = placeCompactChildren(child.source, child.node, cursorY + gap, depth + 1, width, options, nodes, metrics);
       }
     }
   }
@@ -309,37 +380,38 @@ function positionHorizontalHierarchy(
   width: number,
   height: number,
   sourceNodes: PositionedNode[],
-  options: LayoutOptions
+  options: LayoutOptions,
+  metrics: LayoutMetrics
 ): PositionedNode[] {
   const visibleRoot = hierarchy(root, (node) => visibleChildren(node, options));
   const maxDepth = Math.max(1, visibleRoot.height);
-  const rightPadding = Math.min(42, Math.max(24, width * 0.025));
-  const leafX = width - rightPadding - DEVICE_NODE_WIDTH;
+  const rightPadding = Math.min(42 * metrics.scale, Math.max(24 * metrics.scale, width * 0.025));
+  const leafX = width - rightPadding - metrics.deviceNodeWidth;
   const xByDepth = new Map<number, number>();
 
   for (let depth = 1; depth <= maxDepth; depth += 1) {
-    xByDepth.set(depth, leafX - (maxDepth - depth) * (DEVICE_NODE_WIDTH + HORIZONTAL_COLUMN_GAP));
+    xByDepth.set(depth, leafX - (maxDepth - depth) * (metrics.deviceNodeWidth + metrics.horizontalColumnGap));
   }
 
   const firstColumnX = xByDepth.get(1) ?? leafX;
   const sourceRight = sourceNodes.reduce((max, source) => Math.max(max, source.x + source.width), 0);
-  const symmetricalRootX = (sourceRight + firstColumnX - ROOT_NODE_WIDTH) / 2;
-  const minimumRootX = sourceRight + HORIZONTAL_COLUMN_GAP;
-  const maximumRootX = firstColumnX - ROOT_NODE_WIDTH - HORIZONTAL_COLUMN_GAP;
+  const symmetricalRootX = (sourceRight + firstColumnX - metrics.rootNodeWidth) / 2;
+  const minimumRootX = sourceRight + metrics.horizontalColumnGap;
+  const maximumRootX = firstColumnX - metrics.rootNodeWidth - metrics.horizontalColumnGap;
   const rootX = clamp(symmetricalRootX, minimumRootX, maximumRootX);
-  const tree = measureHorizontalTree(root, 0, options);
-  const top = Math.max(21, (height - tree.subtreeHeight) / 2);
+  const tree = measureHorizontalTree(root, 0, options, metrics);
+  const top = Math.max(21 * metrics.scale, (height - tree.subtreeHeight) / 2);
   const positioned: PositionedNode[] = [];
 
-  placeHorizontalTree(tree, top, rootX, xByDepth, positioned);
+  placeHorizontalTree(tree, top, rootX, xByDepth, positioned, metrics);
   return positioned;
 }
 
-function measureHorizontalTree(node: GraphNode, depth: number, options: LayoutOptions): LayoutTree {
-  const children = visibleChildren(node, options).map((child) => measureHorizontalTree(child, depth + 1, options));
-  const width = depth === 0 ? ROOT_NODE_WIDTH : DEVICE_NODE_WIDTH;
-  const height = depth === 0 ? ROOT_NODE_HEIGHT : DEVICE_NODE_HEIGHT;
-  const gap = depth === 0 ? HORIZONTAL_GROUP_GAP : HORIZONTAL_SIBLING_GAP;
+function measureHorizontalTree(node: GraphNode, depth: number, options: LayoutOptions, metrics: LayoutMetrics): LayoutTree {
+  const children = visibleChildren(node, options).map((child) => measureHorizontalTree(child, depth + 1, options, metrics));
+  const width = depth === 0 ? metrics.rootNodeWidth : metrics.deviceNodeWidth;
+  const height = depth === 0 ? metrics.rootNodeHeight : metrics.deviceNodeHeight;
+  const gap = depth === 0 ? metrics.horizontalGroupGap : metrics.horizontalSiblingGap;
   const childrenHeight =
     children.length > 0
       ? children.reduce((sum, child) => sum + child.subtreeHeight, 0) + Math.max(0, children.length - 1) * gap
@@ -361,9 +433,13 @@ function placeHorizontalTree(
   top: number,
   rootX: number,
   xByDepth: Map<number, number>,
-  positioned: PositionedNode[]
+  positioned: PositionedNode[],
+  metrics: LayoutMetrics
 ): PositionedNode {
-  const x = tree.depth === 0 ? rootX : xByDepth.get(tree.depth) ?? rootX + tree.depth * (DEVICE_NODE_WIDTH + HORIZONTAL_COLUMN_GAP);
+  const x =
+    tree.depth === 0
+      ? rootX
+      : xByDepth.get(tree.depth) ?? rootX + tree.depth * (metrics.deviceNodeWidth + metrics.horizontalColumnGap);
   const node: PositionedNode = {
     ...tree.node,
     x,
@@ -376,13 +452,13 @@ function placeHorizontalTree(
   positioned.push(node);
 
   if (tree.children.length > 0) {
-    const gap = tree.depth === 0 ? HORIZONTAL_GROUP_GAP : HORIZONTAL_SIBLING_GAP;
+    const gap = tree.depth === 0 ? metrics.horizontalGroupGap : metrics.horizontalSiblingGap;
     const childrenHeight =
       tree.children.reduce((sum, child) => sum + child.subtreeHeight, 0) + Math.max(0, tree.children.length - 1) * gap;
     let childTop = top + (tree.subtreeHeight - childrenHeight) / 2;
 
     for (const child of tree.children) {
-      const childNode = placeHorizontalTree(child, childTop, rootX, xByDepth, positioned);
+      const childNode = placeHorizontalTree(child, childTop, rootX, xByDepth, positioned, metrics);
       node.visibleChildren.push(childNode);
       childTop += child.subtreeHeight + gap;
     }

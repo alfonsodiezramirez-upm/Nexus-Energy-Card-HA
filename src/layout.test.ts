@@ -120,6 +120,27 @@ describe("layoutGraph", () => {
     expect(childGap).toBe(sourceGap);
   });
 
+  it("scales node geometry and spacing from the global visual scale", () => {
+    const graph = buildEnergyGraph(fixtureConfig(), fixtureHass(), "power");
+    const layout = layoutGraph(graph, {
+      width: 1380,
+      height: 720,
+      orientation: "horizontal",
+      expandedIds: new Set(),
+      collapsedIds: new Set(),
+      defaultExpandedDepth: 2,
+      scale: 0.75
+    });
+    const home = getNode(layout.nodes, "home");
+    const child = getNode(layout.nodes, "ground-floor");
+
+    expect(home.width).toBeCloseTo(203 * 0.75, 5);
+    expect(home.height).toBeCloseTo(308 * 0.75, 5);
+    expect(child.width).toBeCloseTo(228 * 0.75, 5);
+    expect(child.height).toBeCloseTo(54 * 0.75, 5);
+    expect(layout.sources[1].y - (layout.sources[0].y + layout.sources[0].height)).toBeCloseTo(12 * 0.75, 5);
+  });
+
   it("can hide zero-value sources when cleanup mode is enabled", () => {
     const graph = buildEnergyGraph(fixtureConfig(), fixtureHass(), "power");
     const layout = layoutGraph(graph, {

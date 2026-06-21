@@ -1,13 +1,16 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { EMPTY_CONFIG } from "./default-config";
+import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES } from "./i18n";
+import { visualScaleFromPercent, visualScaleToPercent } from "./visual-scale";
 import type {
   HomeAssistantLike,
   NexusBackgroundStyle,
   NexusColorThreshold,
   NexusDirection,
   NexusEnergyCardConfig,
-  NexusEnergyNodeConfig
+  NexusEnergyNodeConfig,
+  NexusLanguage
 } from "./types";
 
 const SOURCE_PARENT_ID = "__source__";
@@ -18,25 +21,6 @@ const EMPTY_MAIN_NODE: NexusEnergyNodeConfig = {
   icon: "mdi:home-outline",
   children: []
 };
-
-const COMMON_ICONS = [
-  "mdi:home-outline",
-  "mdi:white-balance-sunny",
-  "mdi:battery-charging-60",
-  "mdi:transmission-tower",
-  "mdi:engine",
-  "mdi:office-building-marker-outline",
-  "mdi:sofa-outline",
-  "mdi:pot-steam-outline",
-  "mdi:stove",
-  "mdi:microwave",
-  "mdi:toilet",
-  "mdi:bed-king-outline",
-  "mdi:bed-outline",
-  "mdi:bathtub-outline",
-  "mdi:power-plug-outline",
-  "mdi:dots-horizontal"
-];
 
 interface EntityOption {
   entity_id: string;
@@ -108,9 +92,6 @@ export class NexusEnergyCardEditor extends LitElement {
         <datalist id="nexus-entities">
           ${entities.map((entity) => html`<option value=${entity.entity_id}>${entity.label}</option>`)}
         </datalist>
-        <datalist id="nexus-icons">
-          ${COMMON_ICONS.map((icon) => html`<option value=${icon}></option>`)}
-        </datalist>
 
         ${this._renderGeneral(mainNode, entities)}
         ${this._renderBuilder(mainNode, entities)}
@@ -130,6 +111,16 @@ export class NexusEnergyCardEditor extends LitElement {
           <label>
             Titulo de la tarjeta
             <input .value=${this._config.title ?? ""} @input=${(event: Event) => this._patchConfig("title", cleanText(valueOf(event)))} />
+          </label>
+          <label>
+            Idioma de la interfaz
+            <select
+              .value=${this._config.language ?? "auto"}
+              @change=${(event: Event) => this._patchConfig("language", valueOf(event) as NexusLanguage)}
+            >
+              <option value="auto">Automático (Sistema)</option>
+              ${SUPPORTED_LANGUAGES.map((language) => html`<option value=${language}>${LANGUAGE_LABELS[language]}</option>`)}
+            </select>
           </label>
           ${this._renderEntityField("Entidad de la Casa", mainNode.entity ?? mainNode.power_entity ?? "", entities, (entityId) =>
             this._patchMain(this._entityPatch(entityId))
@@ -152,14 +143,9 @@ export class NexusEnergyCardEditor extends LitElement {
               @input=${(event: Event) => this._patchMain({ name: cleanText(valueOf(event)) || "Casa" })}
             />
           </label>
-          <label>
-            Icono del nodo principal
-            <input
-              list="nexus-icons"
-              .value=${mainNode.icon ?? "mdi:home-outline"}
-              @input=${(event: Event) => this._patchMain({ icon: cleanText(valueOf(event)) || "mdi:home-outline" })}
-            />
-          </label>
+          ${this._renderIconPicker("Icono del nodo principal", mainNode.icon ?? "mdi:home-outline", (icon) =>
+            this._patchMain({ icon: icon || "mdi:home-outline" })
+          )}
         </div>
       </section>
     `;
@@ -235,14 +221,9 @@ export class NexusEnergyCardEditor extends LitElement {
                     Nombre a mostrar
                     <input .value=${node.name} @input=${(event: Event) => this._patchNode(node.id, { name: cleanText(valueOf(event)) })} />
                   </label>
-                  <label>
-                    Icono
-                    <input
-                      list="nexus-icons"
-                      .value=${node.icon ?? ""}
-                      @input=${(event: Event) => this._patchNode(node.id, { icon: cleanText(valueOf(event)) || undefined })}
-                    />
-                  </label>
+                  ${this._renderIconPicker("Icono", node.icon ?? "", (icon) =>
+                    this._patchNode(node.id, { icon: icon || undefined })
+                  )}
                   <label>
                     Nodo padre
                     <select .value=${node.parentId} @change=${(event: Event) => this._patchNode(node.id, { parentId: valueOf(event) })}>
@@ -286,6 +267,7 @@ export class NexusEnergyCardEditor extends LitElement {
   private _renderAppearance() {
     const speed = this._config.animation_speed ?? 1;
     const speedLabel = speed < 0.85 ? "Lento" : speed > 1.25 ? "Rapido" : "Normal";
+    const visualScale = visualScaleToPercent(this._config.visual_scale);
 
     return html`
       <section class="panel">
@@ -347,6 +329,20 @@ export class NexusEnergyCardEditor extends LitElement {
               .value=${String(this._config.default_expanded_depth ?? 2)}
               @input=${(event: Event) => this._patchConfig("default_expanded_depth", Number(valueOf(event)))}
             />
+          </label>
+          <label>
+            Escala global de la tarjeta
+            <div class="range-row">
+              <input
+                type="range"
+                min="50"
+                max="150"
+                step="5"
+                .value=${String(visualScale)}
+                @input=${(event: Event) => this._patchConfig("visual_scale", visualScaleFromPercent(valueOf(event)))}
+              />
+              <output>${visualScale}%</output>
+            </div>
           </label>
         </div>
       </section>
@@ -415,6 +411,20 @@ export class NexusEnergyCardEditor extends LitElement {
           placeholder="sensor..."
         />
         ${entities.length ? nothing : html`<span class="field-note">sensor power</span>`}
+      </label>
+    `;
+  }
+
+  private _renderIconPicker(label: string, value: string, onChange: (icon: string) => void) {
+    return html`
+      <label>
+        ${label}
+        <ha-icon-picker
+          .hass=${this._hass}
+          .value=${value}
+          @value-changed=${(event: Event) => onChange(iconValueOf(event))}
+          @change=${(event: Event) => onChange(iconValueOf(event))}
+        ></ha-icon-picker>
       </label>
     `;
   }
@@ -873,11 +883,16 @@ export class NexusEnergyCardEditor extends LitElement {
     }
 
     input,
-    select {
+    select,
+    ha-icon-picker {
       color-scheme: dark;
       box-sizing: border-box;
       width: 100%;
       max-width: 100%;
+    }
+
+    input,
+    select {
       min-height: 36px;
       border: 1px solid rgba(150, 180, 210, 0.24);
       border-radius: 8px;
@@ -887,6 +902,25 @@ export class NexusEnergyCardEditor extends LitElement {
       font: inherit;
       letter-spacing: 0;
       outline: 0;
+    }
+
+    ha-icon-picker {
+      display: block;
+      color: var(--editor-option-text);
+      --mdc-theme-primary: var(--editor-accent);
+      --mdc-text-field-fill-color: var(--editor-field-bg);
+      --mdc-text-field-ink-color: var(--editor-option-text);
+      --mdc-text-field-label-ink-color: var(--editor-muted);
+      --mdc-text-field-outlined-idle-border-color: rgba(150, 180, 210, 0.24);
+      --mdc-text-field-outlined-hover-border-color: rgba(150, 180, 210, 0.38);
+      --mdc-text-field-outlined-disabled-border-color: rgba(150, 180, 210, 0.12);
+      --mdc-select-fill-color: var(--editor-field-bg);
+      --mdc-select-ink-color: var(--editor-option-text);
+      --mdc-select-label-ink-color: var(--editor-muted);
+      --mdc-menu-item-height: 36px;
+      --paper-listbox-background-color: var(--editor-option-bg);
+      --primary-text-color: var(--editor-option-text);
+      --secondary-text-color: var(--editor-muted);
     }
 
     select {
@@ -1157,6 +1191,12 @@ function clampPercentage(value: unknown): number {
 
 function valueOf(event: Event): string {
   return (event.target as HTMLInputElement | HTMLSelectElement).value;
+}
+
+function iconValueOf(event: Event): string {
+  const detailValue = (event as CustomEvent<{ value?: unknown }>).detail?.value;
+  const targetValue = (event.target as HTMLElement & { value?: unknown }).value;
+  return cleanText(String(detailValue ?? targetValue ?? ""));
 }
 
 declare global {

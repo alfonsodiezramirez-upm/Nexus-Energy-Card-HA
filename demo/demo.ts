@@ -104,6 +104,69 @@ class HaIconStub extends HTMLElement {
 }
 customElements.define("ha-icon", HaIconStub);
 
+class HaIconPickerStub extends HTMLElement {
+  private _value = "";
+
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+  }
+
+  set value(value: string) {
+    this._value = value ?? "";
+    this.render();
+  }
+
+  get value(): string {
+    return this._value;
+  }
+
+  connectedCallback() {
+    this.render();
+  }
+
+  private render() {
+    if (!this.shadowRoot) {
+      return;
+    }
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host {
+          display: block;
+          width: 100%;
+        }
+        .field {
+          display: flex;
+          align-items: center;
+          min-height: 36px;
+          gap: 8px;
+          border: 1px solid rgba(150, 180, 210, 0.24);
+          border-radius: 8px;
+          padding: 0 10px;
+          color: var(--primary-text-color, #eef5ff);
+          background: #111c29;
+          font: inherit;
+        }
+        ha-icon {
+          color: #6fc8ff;
+          --mdc-icon-size: 18px;
+        }
+        span {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      </style>
+      <div class="field">
+        <ha-icon icon="${this._value || "mdi:home-outline"}"></ha-icon>
+        <span>${this._value || "mdi:home-outline"}</span>
+      </div>
+    `;
+  }
+}
+customElements.define("ha-icon-picker", HaIconPickerStub);
+
 @customElement("nexus-demo-app")
 export class NexusDemoApp extends LitElement {
   @state() private _hass = createHass(0);

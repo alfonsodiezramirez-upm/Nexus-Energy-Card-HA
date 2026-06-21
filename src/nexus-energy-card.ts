@@ -5,6 +5,8 @@ import { DEFAULT_CONFIG, EMPTY_CONFIG } from "./default-config";
 import { edgePath, layoutGraph } from "./layout";
 import { calculateEdgeWidth } from "./flow-style";
 import { formatPercent, formatValue } from "./format";
+import { resolveLanguage, t, type NexusTranslationKey, type ResolvedNexusLanguage } from "./i18n";
+import { normalizeVisualScale } from "./visual-scale";
 import type {
   GraphBuildResult,
   GraphLayout,
@@ -100,7 +102,7 @@ export class NexusEnergyCard extends LitElement {
 
   public setConfig(config: NexusEnergyCardConfig): void {
     if (!config.entities && !config.nodes && !config.sources) {
-      throw new Error("Parámetros 'entities', 'sources' o 'nodes' mínimos no definidos.");
+      throw new Error("Missing minimum 'entities', 'sources', or 'nodes' parameters.");
     }
 
     const configWithoutLegacyHeight = { ...config } as NexusEnergyCardConfig & { height?: number };
@@ -116,6 +118,7 @@ export class NexusEnergyCard extends LitElement {
     this._mode = "power";
     this._restoreBranchState();
     this._rebuildGraph(true);
+    this._scheduleResize(this.getBoundingClientRect().width || this._width, 0);
   }
 
   public set hass(hass: HomeAssistantLike) {
@@ -185,27 +188,51 @@ export class NexusEnergyCard extends LitElement {
   }
 
   private _contentWidthForBreakpoint(hostWidth: number, breakpoint: NexusBreakpoint): number {
+    const scale = this._visualScale();
     const framePadding =
       breakpoint === "ultra-compact"
         ? ULTRA_FRAME_HORIZONTAL_PADDING
         : breakpoint === "compact"
           ? COMPACT_FRAME_HORIZONTAL_PADDING
           : WIDE_FRAME_HORIZONTAL_PADDING;
-    return Math.max(280, Math.round(hostWidth - framePadding));
+    return Math.max(280, Math.round(hostWidth - framePadding * scale));
+  }
+
+  private _visualScale(): number {
+    return normalizeVisualScale(this._config.visual_scale);
+  }
+
+  private _language(): ResolvedNexusLanguage {
+    return resolveLanguage(this._config.language, this._hass?.language);
+  }
+
+  private _t(key: NexusTranslationKey): string {
+    return t(this._language(), key);
+  }
+
+  private _tooltipWidth(): number {
+    return TOOLTIP_WIDTH * this._visualScale();
+  }
+
+  private _tooltipHeight(): number {
+    return TOOLTIP_HEIGHT * this._visualScale();
   }
 
   protected override render() {
+    const scale = this._visualScale();
+    const language = this._language();
     const orientation = this._breakpoint === "ultra-compact" ? "stacked" : this._breakpoint === "compact" ? "vertical" : "horizontal";
     const graphHeight =
       orientation === "stacked" ? ULTRA_COMPACT_GRAPH_HEIGHT : orientation === "vertical" ? COMPACT_GRAPH_HEIGHT : WIDE_GRAPH_HEIGHT;
     const layout = layoutGraph(this._graph, {
       width: this._width,
-      height: graphHeight,
+      height: graphHeight * scale,
       orientation,
       expandedIds: this._expandedIds,
       collapsedIds: this._collapsedIds,
       defaultExpandedDepth: this._config.default_expanded_depth ?? 2,
-      hideZeroNodes: this._config.hide_zero_nodes ?? false
+      hideZeroNodes: this._config.hide_zero_nodes ?? false,
+      scale
     });
     const primary = layout.primaryRoot;
     const solarSources = this._graph.sources.filter((source) => this._isSolarSource(source));
@@ -216,7 +243,7 @@ export class NexusEnergyCard extends LitElement {
         : 0;
 
     return html`
-      <ha-card class=${`nexus-shell bg-${this._config.background_style ?? "glass"}`}>
+      <ha-card class=${`nexus-shell bg-${this._config.background_style ?? "glass"}`} style=${`--nexus-scale:${scale};`}>
         <section class=${`nexus-card-frame ${this._breakpoint}`} data-breakpoint=${this._breakpoint} @pointerleave=${this._clearTooltip}>
           <header class="topbar">
             <div class="brand">
@@ -224,22 +251,27 @@ export class NexusEnergyCard extends LitElement {
               <div>
                 <h2>${this._config.title ?? "Nexus Energy"}</h2>
                 <p>
-                  Total en casa
+                  ${t(language, "totalInHome")}
                   <span class="live-dot"></span>
-                  <strong>Ahora</strong>
+                  <strong>${t(language, "now")}</strong>
                 </p>
               </div>
             </div>
           </header>
 
-          <section class="summary-strip" aria-label="Resumen energético">
+          <section class="summary-strip" aria-label=${t(language, "energySummary")}>
             <div class="primary-metric">
-              <span>Consumo actual</span>
+              <span>${t(language, "currentConsumption")}</span>
               <strong>${formatValue(this._graph.total, this._mode, this._config.precision)}</strong>
             </div>
             <div class="health-pill ${this._graph.overflowNodes.length ? "warning" : ""}">
               <ha-icon icon=${this._graph.overflowNodes.length ? "mdi:alert-circle-outline" : "mdi:shield-check-outline"}></ha-icon>
-              ${this._graph.overflowNodes.length ? `${this._graph.overflowNodes.length} overflow` : "Sistema normal"}
+              ${this._graph.overflowNodes.length
+                ? `${this._graph.overflowNodes.length} ${t(
+                    language,
+                    this._graph.overflowNodes.length === 1 ? "overflowSingular" : "overflowPlural"
+                  )}`
+                : t(language, "systemNormal")}
             </div>
           </section>
 
@@ -348,27 +380,28 @@ export class NexusEnergyCard extends LitElement {
     return html`
       <div class="root-heading">
         <span class="node-icon root-icon"><ha-icon icon=${node.icon}></ha-icon></span>
-        <button class="collapse-button" type="button" title="Expandir o colapsar" @click=${(event: Event) => this._toggleNode(event, node)}>
+        <button class="collapse-button" type="button" title=${this._t("expandCollapse")} @click=${(event: Event) => this._toggleNode(event, node)}>
           <ha-icon icon=${this._collapsedIds.has(node.id) ? "mdi:chevron-down" : "mdi:chevron-up"}></ha-icon>
         </button>
       </div>
       <div class="root-title">${node.name}</div>
       <div class="root-value">${formatValue(node.value, this._mode, this._config.precision)}</div>
-      <div class="root-subtitle">Consumo actual</div>
+      <div class="root-subtitle">${this._t("currentConsumption")}</div>
       <div class=${`gauge ${hasSolarSource ? "" : "is-hidden"}`} style=${`--gauge:${Math.round(solarBalance * 100)}%`}>
         <span>${Math.round(solarBalance * 100)}%</span>
-        <small>Autonomía solar</small>
+        <small>${this._t("solarAutonomy")}</small>
       </div>
       <dl class="root-stats">
-        <div><dt>Voltaje</dt><dd>230 V</dd></div>
-        <div><dt>Frecuencia</dt><dd>50.0 Hz</dd></div>
-        <div><dt>Factor de potencia</dt><dd>0.97</dd></div>
+        <div><dt>${this._t("voltage")}</dt><dd>230 V</dd></div>
+        <div><dt>${this._t("frequency")}</dt><dd>50.0 Hz</dd></div>
+        <div><dt>${this._t("powerFactor")}</dt><dd>0.97</dd></div>
       </dl>
     `;
   }
 
   private _renderCompactNode(node: PositionedNode) {
     const statusText = this._nodeStatus(node);
+    const scale = this._visualScale();
     return html`
       <div class="node-main">
         <span class="node-icon"><ha-icon icon=${node.icon}></ha-icon></span>
@@ -378,7 +411,7 @@ export class NexusEnergyCard extends LitElement {
         </div>
             ${node.children.length
           ? html`
-              <button class="collapse-button" type="button" title="Expandir o colapsar" @click=${(event: Event) => this._toggleNode(event, node)}>
+              <button class="collapse-button" type="button" title=${this._t("expandCollapse")} @click=${(event: Event) => this._toggleNode(event, node)}>
                 <ha-icon icon=${this._collapsedIds.has(node.id) ? "mdi:chevron-down" : "mdi:chevron-up"}></ha-icon>
               </button>
             `
@@ -390,11 +423,11 @@ export class NexusEnergyCard extends LitElement {
               <strong>${formatPercent(node.capacity ? node.value / node.capacity : node.percentOfParent)}</strong>
               <span>${statusText}</span>
             </div>
-            ${this._renderSparkline(node, 129, 26)}
+            ${this._renderSparkline(node, Math.round(129 * scale), Math.round(26 * scale))}
           `
         : nothing}
       ${node.role !== "source" && node.children.length
-        ? html`<div class="container-share">${formatPercent(node.percentOfParent)} del total</div>`
+        ? html`<div class="container-share">${formatPercent(node.percentOfParent)} ${this._t("ofTotal")}</div>`
         : nothing}
     `;
   }
@@ -404,13 +437,16 @@ export class NexusEnergyCard extends LitElement {
     if (!tooltip) {
       return nothing;
     }
+    const tooltipWidth = this._tooltipWidth();
+    const sparklineWidth = Math.round(162 * this._visualScale());
+    const sparklineHeight = Math.round(44 * this._visualScale());
 
     return html`
       <aside
         class=${`tooltip ${tooltip.loading ? "is-loading" : ""}`}
-        style=${`left:${tooltip.x}px;top:${tooltip.y}px;width:${TOOLTIP_WIDTH}px;--tooltip-accent:${tooltip.color};`}
+        style=${`left:${tooltip.x}px;top:${tooltip.y}px;width:${tooltipWidth}px;--tooltip-accent:${tooltip.color};`}
         role="dialog"
-        aria-label=${`Detalle de ${tooltip.name}`}
+        aria-label=${`${this._t("tooltipDetail")} ${tooltip.name}`}
       >
         <header>
           <span class="tooltip-icon"><ha-icon icon=${tooltip.icon}></ha-icon></span>
@@ -422,12 +458,12 @@ export class NexusEnergyCard extends LitElement {
         </header>
         <p>
           <span class="dot"></span>
-          ${formatPercent(tooltip.parentPercent)} de ${tooltip.parentName}
+          ${formatPercent(tooltip.parentPercent)} ${this._t("of")} ${tooltip.parentName}
         </p>
-        ${this._renderTooltipSparkline(tooltip, 162, 44)}
+        ${this._renderTooltipSparkline(tooltip, sparklineWidth, sparklineHeight)}
         <footer>
           <ha-icon icon=${tooltip.error ? "mdi:alert-circle-outline" : tooltip.loading ? "mdi:clock-outline" : "mdi:chart-line"}></ha-icon>
-          ${tooltip.error ?? (tooltip.loading ? "Cargando historial de Home Assistant" : this._tooltipHistoryLabel(tooltip))}
+          ${tooltip.error ?? (tooltip.loading ? this._t("loadingHaHistory") : this._tooltipHistoryLabel(tooltip))}
         </footer>
       </aside>
     `;
@@ -527,7 +563,7 @@ export class NexusEnergyCard extends LitElement {
       name: node.name,
       icon: node.icon,
       valueLabel: this._currentValueLabel(node),
-      parentName: node.parent?.name ?? "Balance",
+      parentName: node.parent?.name ?? this._t("balance"),
       parentPercent: node.parent && node.parent.value > 0 ? node.value / node.parent.value : node.percentOfParent,
       color: this._nodeAccent(node),
       ...this._tooltipPosition(node),
@@ -552,7 +588,7 @@ export class NexusEnergyCard extends LitElement {
         history: points.length ? points : this._tooltip.history,
         loading: false,
         historySource: points.length ? "home-assistant" : "local",
-        error: points.length ? undefined : "Sin muestras historicas disponibles"
+        error: points.length ? undefined : this._t("noHistorySamples")
       };
     } catch {
       if (this._tooltipRequestId !== requestId || this._tooltip?.entityId !== entityId) {
@@ -562,7 +598,7 @@ export class NexusEnergyCard extends LitElement {
         ...this._tooltip,
         loading: false,
         historySource: "local",
-        error: "No se pudo cargar el historial de HA"
+        error: this._t("historyLoadError")
       };
     }
   }
@@ -665,40 +701,43 @@ export class NexusEnergyCard extends LitElement {
   private _tooltipPosition(node: PositionedNode): { x: number; y: number } {
     const stage = this.renderRoot.querySelector<HTMLElement>(".graph-stage");
     const nodeElement = [...this.renderRoot.querySelectorAll<HTMLElement>(".flow-node")].find((element) => element.dataset.nodeId === node.id);
+    const tooltipWidth = this._tooltipWidth();
+    const tooltipHeight = this._tooltipHeight();
+    const scale = this._visualScale();
     if (!stage || !nodeElement) {
       return {
-        x: Math.max(9, node.x + node.width + 11),
-        y: Math.max(9, node.y + node.height / 2 - TOOLTIP_HEIGHT / 2)
+        x: Math.max(9 * scale, node.x + node.width + 11 * scale),
+        y: Math.max(9 * scale, node.y + node.height / 2 - tooltipHeight / 2)
       };
     }
 
     const stageRect = stage.getBoundingClientRect();
     const nodeRect = nodeElement.getBoundingClientRect();
-    const gap = 11;
-    const pad = 9;
+    const gap = 11 * scale;
+    const pad = 9 * scale;
     let x = nodeRect.right - stageRect.left + gap;
-    let y = nodeRect.top - stageRect.top + nodeRect.height / 2 - TOOLTIP_HEIGHT / 2;
+    let y = nodeRect.top - stageRect.top + nodeRect.height / 2 - tooltipHeight / 2;
 
-    if (x + TOOLTIP_WIDTH > stageRect.width - pad) {
-      x = nodeRect.left - stageRect.left - TOOLTIP_WIDTH - gap;
+    if (x + tooltipWidth > stageRect.width - pad) {
+      x = nodeRect.left - stageRect.left - tooltipWidth - gap;
     }
 
     if (x < pad) {
-      x = nodeRect.left - stageRect.left + nodeRect.width / 2 - TOOLTIP_WIDTH / 2;
+      x = nodeRect.left - stageRect.left + nodeRect.width / 2 - tooltipWidth / 2;
       y = nodeRect.bottom - stageRect.top + gap;
-      if (y + TOOLTIP_HEIGHT > stageRect.height - pad) {
-        y = nodeRect.top - stageRect.top - TOOLTIP_HEIGHT - gap;
+      if (y + tooltipHeight > stageRect.height - pad) {
+        y = nodeRect.top - stageRect.top - tooltipHeight - gap;
       }
     }
 
     return {
-      x: clampNumber(x, pad, Math.max(pad, stageRect.width - TOOLTIP_WIDTH - pad)),
-      y: clampNumber(y, pad, Math.max(pad, stageRect.height - TOOLTIP_HEIGHT - pad))
+      x: clampNumber(x, pad, Math.max(pad, stageRect.width - tooltipWidth - pad)),
+      y: clampNumber(y, pad, Math.max(pad, stageRect.height - tooltipHeight - pad))
     };
   }
 
   private _tooltipHistoryLabel(tooltip: TooltipState): string {
-    return tooltip.historySource === "home-assistant" ? "Historial inmediato desde Home Assistant" : "Historial local hasta recibir datos de HA";
+    return tooltip.historySource === "home-assistant" ? this._t("historyFromHomeAssistant") : this._t("localHistoryUntilHa");
   }
 
   private _rebuildGraph(force: boolean): void {
@@ -710,6 +749,10 @@ export class NexusEnergyCard extends LitElement {
   }
 
   private _hasMeaningfulGraphChange(graph: GraphBuildResult): boolean {
+    if (graph.signature !== this._graph.signature) {
+      return true;
+    }
+
     if (this._lastValues.size !== graph.allNodes.length) {
       return true;
     }
@@ -763,7 +806,7 @@ export class NexusEnergyCard extends LitElement {
   }
 
   private _edgeWidth(edge: PositionedEdge, maxFlowValue: number): number {
-    return calculateEdgeWidth(edge.value, maxFlowValue, this._mode, edge.percent, this._config.line_width_base ?? 1.5);
+    return calculateEdgeWidth(edge.value, maxFlowValue, this._mode, edge.percent, this._config.line_width_base ?? 1.5) * this._visualScale();
   }
 
   private _particleDuration(edge: PositionedEdge): string {
@@ -856,15 +899,15 @@ export class NexusEnergyCard extends LitElement {
 
   private _nodeStatus(node: PositionedNode): string {
     if (node.overflow) {
-      return "Desbordamiento";
+      return this._t("overflowStatus");
     }
     if (node.direction === "reverse") {
-      return node.role === "source" ? "Exportando" : "Flujo inverso";
+      return node.role === "source" ? this._t("exporting") : this._t("reverseFlow");
     }
     if (node.value <= 0.001) {
-      return "Standby";
+      return this._t("standby");
     }
-    return node.role === "source" ? "Aportando" : "Activo";
+    return node.role === "source" ? this._t("supplying") : this._t("active");
   }
 
   static override styles = css`
@@ -882,6 +925,7 @@ export class NexusEnergyCard extends LitElement {
       --nexus-green: #58ee83;
       --nexus-yellow: #ffd23f;
       --nexus-red: #ff6259;
+      --nexus-scale: 1;
       letter-spacing: 0;
     }
 
@@ -889,11 +933,11 @@ export class NexusEnergyCard extends LitElement {
       display: block;
       overflow: hidden;
       border: 1px solid rgba(139, 180, 216, 0.18);
-      border-radius: 15px;
+      border-radius: calc(15px * var(--nexus-scale, 1));
       background:
         linear-gradient(135deg, rgba(21, 36, 54, 0.88), rgba(5, 15, 26, 0.96)),
         var(--card-background-color, #08121f);
-      box-shadow: 0 17px 44px rgba(0, 0, 0, 0.34);
+      box-shadow: 0 calc(17px * var(--nexus-scale, 1)) calc(44px * var(--nexus-scale, 1)) rgba(0, 0, 0, 0.34);
     }
 
     .nexus-shell.bg-transparent {
@@ -910,63 +954,63 @@ export class NexusEnergyCard extends LitElement {
     .nexus-card-frame {
       position: relative;
       min-width: 0;
-      --nexus-title-size: 21px;
-      --nexus-primary-metric-size: 36px;
-      --nexus-source-padding: 14px;
-      --nexus-node-main-padding: 0 14px;
-      --nexus-node-main-gap: 9px;
-      --nexus-node-icon-size: 26px;
-      --nexus-node-symbol-size: 16px;
-      --nexus-node-title-size: 11px;
-      --nexus-node-value-size: 11px;
-      --nexus-root-padding: 20px 20px 15px;
-      --nexus-root-icon-size: 36px;
-      --nexus-root-value-size: 27px;
-      --nexus-gauge-width: 102px;
-      --nexus-gauge-height: 62px;
-      padding: 18px 22px 14px;
+      --nexus-title-size: calc(21px * var(--nexus-scale, 1));
+      --nexus-primary-metric-size: calc(36px * var(--nexus-scale, 1));
+      --nexus-source-padding: calc(14px * var(--nexus-scale, 1));
+      --nexus-node-main-padding: 0 calc(14px * var(--nexus-scale, 1));
+      --nexus-node-main-gap: calc(9px * var(--nexus-scale, 1));
+      --nexus-node-icon-size: calc(26px * var(--nexus-scale, 1));
+      --nexus-node-symbol-size: calc(16px * var(--nexus-scale, 1));
+      --nexus-node-title-size: calc(11px * var(--nexus-scale, 1));
+      --nexus-node-value-size: calc(11px * var(--nexus-scale, 1));
+      --nexus-root-padding: calc(20px * var(--nexus-scale, 1)) calc(20px * var(--nexus-scale, 1)) calc(15px * var(--nexus-scale, 1));
+      --nexus-root-icon-size: calc(36px * var(--nexus-scale, 1));
+      --nexus-root-value-size: calc(27px * var(--nexus-scale, 1));
+      --nexus-gauge-width: calc(102px * var(--nexus-scale, 1));
+      --nexus-gauge-height: calc(62px * var(--nexus-scale, 1));
+      padding: calc(18px * var(--nexus-scale, 1)) calc(22px * var(--nexus-scale, 1)) calc(14px * var(--nexus-scale, 1));
       border-radius: inherit;
       background:
         linear-gradient(90deg, rgba(64, 165, 255, 0.1), transparent 32%, rgba(73, 240, 191, 0.07)),
         rgba(4, 11, 19, 0.38);
-      backdrop-filter: blur(12px);
+      backdrop-filter: blur(calc(12px * var(--nexus-scale, 1)));
       overflow: hidden;
     }
 
     .nexus-card-frame.compact {
-      --nexus-title-size: 15px;
-      --nexus-primary-metric-size: 26px;
-      --nexus-source-padding: 8px;
-      --nexus-node-main-padding: 0 8px;
-      --nexus-node-main-gap: 6px;
-      --nexus-node-icon-size: 23px;
-      --nexus-node-symbol-size: 14px;
-      --nexus-node-title-size: 10px;
-      --nexus-node-value-size: 9px;
-      --nexus-root-padding: 12px;
-      --nexus-root-icon-size: 30px;
-      --nexus-root-value-size: 21px;
-      --nexus-gauge-width: 81px;
-      --nexus-gauge-height: 51px;
-      padding: 11px 9px 9px;
+      --nexus-title-size: calc(15px * var(--nexus-scale, 1));
+      --nexus-primary-metric-size: calc(26px * var(--nexus-scale, 1));
+      --nexus-source-padding: calc(8px * var(--nexus-scale, 1));
+      --nexus-node-main-padding: 0 calc(8px * var(--nexus-scale, 1));
+      --nexus-node-main-gap: calc(6px * var(--nexus-scale, 1));
+      --nexus-node-icon-size: calc(23px * var(--nexus-scale, 1));
+      --nexus-node-symbol-size: calc(14px * var(--nexus-scale, 1));
+      --nexus-node-title-size: calc(10px * var(--nexus-scale, 1));
+      --nexus-node-value-size: calc(9px * var(--nexus-scale, 1));
+      --nexus-root-padding: calc(12px * var(--nexus-scale, 1));
+      --nexus-root-icon-size: calc(30px * var(--nexus-scale, 1));
+      --nexus-root-value-size: calc(21px * var(--nexus-scale, 1));
+      --nexus-gauge-width: calc(81px * var(--nexus-scale, 1));
+      --nexus-gauge-height: calc(51px * var(--nexus-scale, 1));
+      padding: calc(11px * var(--nexus-scale, 1)) calc(9px * var(--nexus-scale, 1)) calc(9px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.ultra-compact {
-      --nexus-title-size: 14px;
-      --nexus-primary-metric-size: 23px;
-      --nexus-source-padding: 7px 8px;
-      --nexus-node-main-padding: 0 8px;
-      --nexus-node-main-gap: 6px;
-      --nexus-node-icon-size: 21px;
-      --nexus-node-symbol-size: 13px;
-      --nexus-node-title-size: 10px;
-      --nexus-node-value-size: 9px;
-      --nexus-root-padding: 11px;
-      --nexus-root-icon-size: 29px;
-      --nexus-root-value-size: 20px;
-      --nexus-gauge-width: 71px;
-      --nexus-gauge-height: 44px;
-      padding: 8px;
+      --nexus-title-size: calc(14px * var(--nexus-scale, 1));
+      --nexus-primary-metric-size: calc(23px * var(--nexus-scale, 1));
+      --nexus-source-padding: calc(7px * var(--nexus-scale, 1)) calc(8px * var(--nexus-scale, 1));
+      --nexus-node-main-padding: 0 calc(8px * var(--nexus-scale, 1));
+      --nexus-node-main-gap: calc(6px * var(--nexus-scale, 1));
+      --nexus-node-icon-size: calc(21px * var(--nexus-scale, 1));
+      --nexus-node-symbol-size: calc(13px * var(--nexus-scale, 1));
+      --nexus-node-title-size: calc(10px * var(--nexus-scale, 1));
+      --nexus-node-value-size: calc(9px * var(--nexus-scale, 1));
+      --nexus-root-padding: calc(11px * var(--nexus-scale, 1));
+      --nexus-root-icon-size: calc(29px * var(--nexus-scale, 1));
+      --nexus-root-value-size: calc(20px * var(--nexus-scale, 1));
+      --nexus-gauge-width: calc(71px * var(--nexus-scale, 1));
+      --nexus-gauge-height: calc(44px * var(--nexus-scale, 1));
+      padding: calc(8px * var(--nexus-scale, 1));
     }
 
     .bg-transparent .nexus-card-frame {
@@ -989,28 +1033,28 @@ export class NexusEnergyCard extends LitElement {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 14px;
-      margin-bottom: 14px;
+      gap: calc(14px * var(--nexus-scale, 1));
+      margin-bottom: calc(14px * var(--nexus-scale, 1));
     }
 
     .brand {
       display: flex;
       align-items: flex-start;
-      gap: 12px;
+      gap: calc(12px * var(--nexus-scale, 1));
       min-width: 0;
     }
 
     .brand-icon {
       display: grid;
-      width: 29px;
-      height: 29px;
+      width: calc(29px * var(--nexus-scale, 1));
+      height: calc(29px * var(--nexus-scale, 1));
       place-items: center;
       color: #62c7ff;
-      filter: drop-shadow(0 0 9px rgba(56, 165, 255, 0.42));
+      filter: drop-shadow(0 0 calc(9px * var(--nexus-scale, 1)) rgba(56, 165, 255, 0.42));
     }
 
     .brand-icon ha-icon {
-      --mdc-icon-size: 26px;
+      --mdc-icon-size: calc(26px * var(--nexus-scale, 1));
     }
 
     h2 {
@@ -1024,10 +1068,10 @@ export class NexusEnergyCard extends LitElement {
     .brand p {
       display: flex;
       align-items: center;
-      gap: 5px;
-      margin: 14px 0 0;
+      gap: calc(5px * var(--nexus-scale, 1));
+      margin: calc(14px * var(--nexus-scale, 1)) 0 0;
       color: var(--nexus-muted);
-      font-size: 9px;
+      font-size: calc(9px * var(--nexus-scale, 1));
       font-weight: 700;
       text-transform: uppercase;
     }
@@ -1038,17 +1082,17 @@ export class NexusEnergyCard extends LitElement {
     }
 
     .live-dot {
-      width: 5px;
-      height: 5px;
+      width: calc(5px * var(--nexus-scale, 1));
+      height: calc(5px * var(--nexus-scale, 1));
       border-radius: 999px;
       background: var(--nexus-green);
-      box-shadow: 0 0 11px rgba(88, 238, 131, 0.85);
+      box-shadow: 0 0 calc(11px * var(--nexus-scale, 1)) rgba(88, 238, 131, 0.85);
     }
 
     .summary-strip {
       display: flex;
       align-items: center;
-      gap: 11px;
+      gap: calc(11px * var(--nexus-scale, 1));
     }
 
     button,
@@ -1060,12 +1104,12 @@ export class NexusEnergyCard extends LitElement {
     .health-pill {
       display: flex;
       align-items: center;
-      min-height: 33px;
+      min-height: calc(33px * var(--nexus-scale, 1));
       border: 1px solid var(--nexus-line);
-      border-radius: 17px;
+      border-radius: calc(17px * var(--nexus-scale, 1));
       background: rgba(12, 22, 34, 0.55);
       color: var(--nexus-muted);
-      backdrop-filter: blur(12px);
+      backdrop-filter: blur(calc(12px * var(--nexus-scale, 1)));
     }
 
     .summary-strip {
@@ -1075,12 +1119,12 @@ export class NexusEnergyCard extends LitElement {
 
     .primary-metric {
       display: grid;
-      gap: 3px;
+      gap: calc(3px * var(--nexus-scale, 1));
     }
 
     .primary-metric span {
       color: var(--nexus-muted);
-      font-size: 9px;
+      font-size: calc(9px * var(--nexus-scale, 1));
       font-weight: 750;
       text-transform: uppercase;
     }
@@ -1092,10 +1136,10 @@ export class NexusEnergyCard extends LitElement {
     }
 
     .health-pill {
-      gap: 6px;
-      padding: 0 12px;
+      gap: calc(6px * var(--nexus-scale, 1));
+      padding: 0 calc(12px * var(--nexus-scale, 1));
       color: #68f292;
-      font-size: 11px;
+      font-size: calc(11px * var(--nexus-scale, 1));
       font-weight: 700;
     }
 
@@ -1104,14 +1148,14 @@ export class NexusEnergyCard extends LitElement {
     }
 
     .health-pill ha-icon {
-      --mdc-icon-size: 16px;
+      --mdc-icon-size: calc(16px * var(--nexus-scale, 1));
     }
 
     .graph-stage {
       position: relative;
       z-index: 2;
-      min-height: 390px;
-      margin-top: 2px;
+      min-height: calc(390px * var(--nexus-scale, 1));
+      margin-top: calc(2px * var(--nexus-scale, 1));
     }
 
     .flow-layer,
@@ -1144,7 +1188,7 @@ export class NexusEnergyCard extends LitElement {
     }
 
     .flow-path.power {
-      stroke-dasharray: 4 14;
+      stroke-dasharray: calc(4px * var(--nexus-scale, 1)) calc(14px * var(--nexus-scale, 1));
       animation: dash-flow 1.4s linear infinite;
     }
 
@@ -1153,7 +1197,7 @@ export class NexusEnergyCard extends LitElement {
     }
 
     .particle {
-      filter: drop-shadow(0 0 8px currentColor);
+      filter: drop-shadow(0 0 calc(8px * var(--nexus-scale, 1)) currentColor);
     }
 
     @keyframes dash-flow {
@@ -1167,15 +1211,15 @@ export class NexusEnergyCard extends LitElement {
       box-sizing: border-box;
       overflow: hidden;
       border: 1px solid rgba(158, 195, 226, 0.22);
-      border-radius: 9px;
+      border-radius: calc(9px * var(--nexus-scale, 1));
       background:
         linear-gradient(180deg, rgba(40, 61, 82, 0.72), rgba(17, 31, 46, 0.72)),
         rgba(14, 26, 39, 0.76);
       color: #f7fbff;
       box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        0 11px 24px rgba(0, 0, 0, 0.24);
-      backdrop-filter: blur(9px);
+        0 calc(11px * var(--nexus-scale, 1)) calc(24px * var(--nexus-scale, 1)) rgba(0, 0, 0, 0.24);
+      backdrop-filter: blur(calc(9px * var(--nexus-scale, 1)));
       outline: 0;
       cursor: default;
       transition:
@@ -1187,11 +1231,11 @@ export class NexusEnergyCard extends LitElement {
 
     .flow-node:hover,
     .flow-node:focus-visible {
-      transform: translateY(-1px);
+      transform: translateY(calc(-1px * var(--nexus-scale, 1)));
       border-color: rgba(120, 190, 255, 0.56);
       box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.12),
-        0 14px 32px rgba(0, 0, 0, 0.34);
+        0 calc(14px * var(--nexus-scale, 1)) calc(32px * var(--nexus-scale, 1)) rgba(0, 0, 0, 0.34);
     }
 
     .flow-node.is-container {
@@ -1208,7 +1252,7 @@ export class NexusEnergyCard extends LitElement {
       box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.12),
         0 0 0 1px rgba(255, 98, 89, 0.16),
-        0 14px 29px rgba(255, 98, 89, 0.12);
+        0 calc(14px * var(--nexus-scale, 1)) calc(29px * var(--nexus-scale, 1)) rgba(255, 98, 89, 0.12);
     }
 
     .flow-node.role-rest {
@@ -1250,7 +1294,7 @@ export class NexusEnergyCard extends LitElement {
       width: var(--nexus-node-icon-size);
       height: var(--nexus-node-icon-size);
       place-items: center;
-      border-radius: 8px;
+      border-radius: calc(8px * var(--nexus-scale, 1));
       color: var(--node-accent, #8bbcff);
       background: rgba(58, 167, 255, 0.1);
     }
@@ -1273,7 +1317,7 @@ export class NexusEnergyCard extends LitElement {
     .node-copy {
       display: grid;
       min-width: 0;
-      gap: 3px;
+      gap: calc(3px * var(--nexus-scale, 1));
     }
 
     .node-copy strong {
@@ -1314,18 +1358,18 @@ export class NexusEnergyCard extends LitElement {
 
     .container-share {
       position: absolute;
-      right: 14px;
-      bottom: 7px;
-      font-size: 9px;
+      right: calc(14px * var(--nexus-scale, 1));
+      bottom: calc(7px * var(--nexus-scale, 1));
+      font-size: calc(9px * var(--nexus-scale, 1));
     }
 
     .collapse-button {
       display: grid;
-      width: 23px;
-      height: 23px;
+      width: calc(23px * var(--nexus-scale, 1));
+      height: calc(23px * var(--nexus-scale, 1));
       place-items: center;
       border: 0;
-      border-radius: 8px;
+      border-radius: calc(8px * var(--nexus-scale, 1));
       color: rgba(255, 255, 255, 0.74);
       background: transparent;
       cursor: pointer;
@@ -1337,7 +1381,7 @@ export class NexusEnergyCard extends LitElement {
     }
 
     .collapse-button ha-icon {
-      --mdc-icon-size: 15px;
+      --mdc-icon-size: calc(15px * var(--nexus-scale, 1));
     }
 
     .source-meta {
@@ -1345,9 +1389,9 @@ export class NexusEnergyCard extends LitElement {
       z-index: 1;
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin: 6px 0 3px 38px;
-      font-size: 10px;
+      gap: calc(8px * var(--nexus-scale, 1));
+      margin: calc(6px * var(--nexus-scale, 1)) 0 calc(3px * var(--nexus-scale, 1)) calc(38px * var(--nexus-scale, 1));
+      font-size: calc(10px * var(--nexus-scale, 1));
       color: var(--nexus-green);
     }
 
@@ -1358,15 +1402,15 @@ export class NexusEnergyCard extends LitElement {
     .role-source .sparkline {
       position: relative;
       z-index: 1;
-      margin-left: 38px;
-      width: calc(100% - 44px);
-      height: 23px;
+      margin-left: calc(38px * var(--nexus-scale, 1));
+      width: calc(100% - calc(44px * var(--nexus-scale, 1)));
+      height: calc(23px * var(--nexus-scale, 1));
     }
 
     .sparkline-line {
       fill: none;
       stroke: #58ee83;
-      stroke-width: 1.5;
+      stroke-width: calc(1.5px * var(--nexus-scale, 1));
       stroke-linecap: round;
       stroke-linejoin: round;
     }
@@ -1378,7 +1422,7 @@ export class NexusEnergyCard extends LitElement {
 
     .is-root {
       padding: var(--nexus-root-padding);
-      border-radius: 11px;
+      border-radius: calc(11px * var(--nexus-scale, 1));
       background:
         linear-gradient(180deg, rgba(31, 49, 70, 0.78), rgba(12, 24, 39, 0.8)),
         rgba(12, 24, 39, 0.82);
@@ -1393,31 +1437,31 @@ export class NexusEnergyCard extends LitElement {
     .root-icon {
       width: var(--nexus-root-icon-size);
       height: var(--nexus-root-icon-size);
-      border-radius: 11px;
+      border-radius: calc(11px * var(--nexus-scale, 1));
       color: var(--nexus-cyan);
     }
 
     .root-icon ha-icon {
-      --mdc-icon-size: 26px;
+      --mdc-icon-size: calc(26px * var(--nexus-scale, 1));
     }
 
     .root-title {
-      margin-top: 9px;
-      font-size: 14px;
+      margin-top: calc(9px * var(--nexus-scale, 1));
+      font-size: calc(14px * var(--nexus-scale, 1));
       font-weight: 740;
     }
 
     .root-value {
-      margin-top: 12px;
+      margin-top: calc(12px * var(--nexus-scale, 1));
       font-size: var(--nexus-root-value-size);
       line-height: 1;
       font-weight: 740;
     }
 
     .root-subtitle {
-      margin-top: 6px;
+      margin-top: calc(6px * var(--nexus-scale, 1));
       color: var(--nexus-muted);
-      font-size: 11px;
+      font-size: calc(11px * var(--nexus-scale, 1));
     }
 
     .gauge {
@@ -1426,8 +1470,8 @@ export class NexusEnergyCard extends LitElement {
       width: var(--nexus-gauge-width);
       height: var(--nexus-gauge-height);
       place-items: center;
-      margin: 17px auto 9px;
-      border-radius: 114px 114px 12px 12px;
+      margin: calc(17px * var(--nexus-scale, 1)) auto calc(9px * var(--nexus-scale, 1));
+      border-radius: calc(114px * var(--nexus-scale, 1)) calc(114px * var(--nexus-scale, 1)) calc(12px * var(--nexus-scale, 1)) calc(12px * var(--nexus-scale, 1));
       background:
         radial-gradient(circle at 50% 85%, rgba(12, 24, 39, 1) 0 46%, transparent 47%),
         conic-gradient(from 230deg, var(--nexus-cyan) 0 var(--gauge), rgba(255, 255, 255, 0.14) var(--gauge) 74%, transparent 74%);
@@ -1438,31 +1482,31 @@ export class NexusEnergyCard extends LitElement {
     }
 
     .gauge span {
-      margin-top: 11px;
-      font-size: 22px;
+      margin-top: calc(11px * var(--nexus-scale, 1));
+      font-size: calc(22px * var(--nexus-scale, 1));
       font-weight: 760;
     }
 
     .gauge small {
       position: absolute;
-      bottom: 6px;
+      bottom: calc(6px * var(--nexus-scale, 1));
       color: var(--nexus-muted);
-      font-size: 8px;
+      font-size: calc(8px * var(--nexus-scale, 1));
     }
 
     .root-stats {
       display: grid;
-      gap: 6px;
+      gap: calc(6px * var(--nexus-scale, 1));
       margin: 0;
-      padding-top: 11px;
+      padding-top: calc(11px * var(--nexus-scale, 1));
       border-top: 1px solid rgba(255, 255, 255, 0.09);
     }
 
     .root-stats div {
       display: flex;
       justify-content: space-between;
-      gap: 12px;
-      font-size: 10px;
+      gap: calc(12px * var(--nexus-scale, 1));
+      font-size: calc(10px * var(--nexus-scale, 1));
     }
 
     .root-stats dt {
@@ -1478,14 +1522,14 @@ export class NexusEnergyCard extends LitElement {
       position: absolute;
       z-index: 5;
       box-sizing: border-box;
-      padding: 11px;
+      padding: calc(11px * var(--nexus-scale, 1));
       border: 1px solid rgba(158, 195, 226, 0.24);
-      border-radius: 9px;
+      border-radius: calc(9px * var(--nexus-scale, 1));
       background:
         linear-gradient(180deg, rgba(26, 42, 62, 0.88), rgba(11, 22, 36, 0.94)),
         rgba(10, 22, 34, 0.92);
-      box-shadow: 0 17px 32px rgba(0, 0, 0, 0.38);
-      backdrop-filter: blur(11px);
+      box-shadow: 0 calc(17px * var(--nexus-scale, 1)) calc(32px * var(--nexus-scale, 1)) rgba(0, 0, 0, 0.38);
+      backdrop-filter: blur(calc(11px * var(--nexus-scale, 1)));
       pointer-events: none;
       --tooltip-accent: var(--nexus-red);
     }
@@ -1493,24 +1537,24 @@ export class NexusEnergyCard extends LitElement {
     .tooltip header {
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 11px;
+      gap: calc(8px * var(--nexus-scale, 1));
+      font-size: calc(11px * var(--nexus-scale, 1));
       font-weight: 750;
     }
 
     .tooltip-icon {
       display: grid;
       flex: 0 0 auto;
-      width: 26px;
-      height: 26px;
+      width: calc(26px * var(--nexus-scale, 1));
+      height: calc(26px * var(--nexus-scale, 1));
       place-items: center;
-      border-radius: 8px;
+      border-radius: calc(8px * var(--nexus-scale, 1));
       color: var(--tooltip-accent);
       background: color-mix(in srgb, var(--tooltip-accent) 18%, transparent);
     }
 
     .tooltip-icon ha-icon {
-      --mdc-icon-size: 14px;
+      --mdc-icon-size: calc(14px * var(--nexus-scale, 1));
     }
 
     .tooltip header div {
@@ -1534,35 +1578,35 @@ export class NexusEnergyCard extends LitElement {
     }
 
     .tooltip-value {
-      margin-top: 3px;
-      font-size: 10px;
+      margin-top: calc(3px * var(--nexus-scale, 1));
+      font-size: calc(10px * var(--nexus-scale, 1));
     }
 
     .tooltip p {
       display: flex;
       align-items: center;
-      gap: 6px;
-      margin: 8px 0 6px;
+      gap: calc(6px * var(--nexus-scale, 1));
+      margin: calc(8px * var(--nexus-scale, 1)) 0 calc(6px * var(--nexus-scale, 1));
       color: var(--nexus-muted);
-      font-size: 10px;
+      font-size: calc(10px * var(--nexus-scale, 1));
     }
 
     .tooltip .dot {
-      width: 5px;
-      height: 5px;
+      width: calc(5px * var(--nexus-scale, 1));
+      height: calc(5px * var(--nexus-scale, 1));
       border-radius: 999px;
       background: var(--tooltip-accent);
     }
 
     .tooltip .sparkline {
       width: 100%;
-      height: 44px;
-      margin: 3px 0 8px;
+      height: calc(44px * var(--nexus-scale, 1));
+      margin: calc(3px * var(--nexus-scale, 1)) 0 calc(8px * var(--nexus-scale, 1));
     }
 
     .tooltip .sparkline-line {
       stroke: var(--tooltip-accent);
-      stroke-width: 1.8;
+      stroke-width: calc(1.8px * var(--nexus-scale, 1));
     }
 
     .tooltip .sparkline-area {
@@ -1573,13 +1617,13 @@ export class NexusEnergyCard extends LitElement {
     .tooltip footer {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: calc(6px * var(--nexus-scale, 1));
       color: var(--nexus-muted);
-      font-size: 9px;
+      font-size: calc(9px * var(--nexus-scale, 1));
     }
 
     .tooltip footer ha-icon {
-      --mdc-icon-size: 12px;
+      --mdc-icon-size: calc(12px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.compact .topbar,
@@ -1592,35 +1636,35 @@ export class NexusEnergyCard extends LitElement {
 
     .nexus-card-frame.compact .topbar,
     .nexus-card-frame.ultra-compact .topbar {
-      gap: 9px;
-      margin-bottom: 11px;
+      gap: calc(9px * var(--nexus-scale, 1));
+      margin-bottom: calc(11px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.compact .brand,
     .nexus-card-frame.ultra-compact .brand {
-      gap: 8px;
+      gap: calc(8px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.compact .brand p,
     .nexus-card-frame.ultra-compact .brand p {
-      margin-top: 6px;
-      font-size: 8px;
+      margin-top: calc(6px * var(--nexus-scale, 1));
+      font-size: calc(8px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.compact .health-pill,
     .nexus-card-frame.ultra-compact .health-pill {
       align-self: flex-start;
-      min-height: 29px;
+      min-height: calc(29px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.compact .graph-stage {
-      min-height: 390px;
-      margin-top: 8px;
+      min-height: calc(390px * var(--nexus-scale, 1));
+      margin-top: calc(8px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.ultra-compact .graph-stage {
-      min-height: 360px;
-      margin-top: 6px;
+      min-height: calc(360px * var(--nexus-scale, 1));
+      margin-top: calc(6px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.compact .node-main,
@@ -1637,47 +1681,47 @@ export class NexusEnergyCard extends LitElement {
 
     .nexus-card-frame.compact .root-title,
     .nexus-card-frame.ultra-compact .root-title {
-      font-size: 12px;
+      font-size: calc(12px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.compact .root-subtitle,
     .nexus-card-frame.ultra-compact .root-subtitle {
-      font-size: 9px;
+      font-size: calc(9px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.compact .gauge {
-      margin: 11px auto 8px;
+      margin: calc(11px * var(--nexus-scale, 1)) auto calc(8px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.ultra-compact .gauge {
-      margin: 8px auto 0;
+      margin: calc(8px * var(--nexus-scale, 1)) auto 0;
     }
 
     .nexus-card-frame.compact .gauge span {
-      font-size: 17px;
+      font-size: calc(17px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.ultra-compact .gauge span {
-      margin-top: 8px;
-      font-size: 15px;
+      margin-top: calc(8px * var(--nexus-scale, 1));
+      font-size: calc(15px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.compact .gauge small {
-      font-size: 8px;
+      font-size: calc(8px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.ultra-compact .gauge small {
-      bottom: 5px;
-      font-size: 7px;
+      bottom: calc(5px * var(--nexus-scale, 1));
+      font-size: calc(7px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.compact .root-stats {
-      gap: 5px;
-      padding-top: 8px;
+      gap: calc(5px * var(--nexus-scale, 1));
+      padding-top: calc(8px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.compact .root-stats div {
-      font-size: 9px;
+      font-size: calc(9px * var(--nexus-scale, 1));
     }
 
     .nexus-card-frame.ultra-compact .root-stats {

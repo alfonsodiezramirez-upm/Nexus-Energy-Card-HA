@@ -5,6 +5,7 @@ export type NexusDirection = "auto" | "import" | "export";
 export type NexusSeverity = "normal" | "warning" | "critical" | "overflow";
 export type NexusRange = "today" | "yesterday" | "week" | "month" | "year" | "custom";
 export type NexusBackgroundStyle = "transparent" | "glass" | "solid";
+export type NexusLanguage = "auto" | "en" | "es" | "zh" | "fr" | "de" | "hi" | "it" | "ru";
 
 export interface HomeAssistantState {
   entity_id: string;
@@ -16,6 +17,7 @@ export interface HomeAssistantState {
 
 export interface HomeAssistantLike {
   states: Record<string, HomeAssistantState>;
+  language?: string;
   callWS?: <T = unknown>(message: Record<string, unknown>) => Promise<T>;
   callApi?: <T = unknown>(
     method: string,
@@ -63,7 +65,9 @@ export interface NexusEnergyCardConfig {
   animation?: boolean;
   animation_speed?: number;
   line_width_base?: number;
+  visual_scale?: number;
   overflow_tolerance?: number;
+  language?: NexusLanguage;
   background_style?: NexusBackgroundStyle;
   hide_zero_nodes?: boolean;
   base_color?: string;

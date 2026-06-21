@@ -135,7 +135,7 @@ await withTarget(previewUrl.toString(), { width: 1440, height: 1020 }, async (se
 
 const editorUrl = new URL(baseUrl);
 editorUrl.searchParams.set("editor", "1");
-await withTarget(editorUrl.toString(), { width: 1120, height: 1120 }, async (send) => {
+await withTarget(editorUrl.toString(), { width: 1120, height: 1500 }, async (send) => {
   const rect = await waitForRect(
     send,
     `(() => {
@@ -150,7 +150,7 @@ await withTarget(editorUrl.toString(), { width: 1120, height: 1120 }, async (sen
         x: rect.x + window.scrollX,
         y: rect.y + window.scrollY,
         width: rect.width,
-        height: Math.min(rect.height, 1080)
+        height: Math.min(rect.height, 1480)
       };
     })()`,
     "editor"

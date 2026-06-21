@@ -9,6 +9,7 @@ import type {
 } from "./types";
 import { DEFAULT_CONFIG } from "./default-config";
 import { friendlyEntityName, normalizeEntityValue } from "./format";
+import { resolveLanguage, t } from "./i18n";
 
 const EPSILON = 0.0005;
 const HISTORY_LENGTH = 64;
@@ -63,6 +64,7 @@ export function buildEnergyGraph(
     critical: config.thresholds?.critical ?? 0.85
   };
   const overflowToleranceRatio = clampPercentage(config.overflow_tolerance ?? 5) / 100;
+  const language = resolveLanguage(config.language, hass?.language);
   const overflowNodes: GraphNode[] = [];
 
   const buildNode = (
@@ -123,11 +125,11 @@ export function buildEnergyGraph(
             )}${node.unit}, parent=${node.value.toFixed(3)}${node.unit}`
           );
         }
-        node.children.push(createRestNode(node, 0));
+        node.children.push(createRestNode(node, 0, language));
       } else if (overflowDifference > EPSILON) {
-        node.children.push(createRestNode(node, 0));
+        node.children.push(createRestNode(node, 0, language));
       } else if (node.value - childrenTotal > Math.max(EPSILON, node.value * 0.005)) {
-        node.children.push(createRestNode(node, node.value - childrenTotal));
+        node.children.push(createRestNode(node, node.value - childrenTotal, language));
       }
     }
 
@@ -152,7 +154,7 @@ export function buildEnergyGraph(
   const allNodes = [...sources, ...flattenNodes(roots)];
   const total = primaryRoot?.value ?? roots.reduce((sum, node) => sum + node.value, 0);
   const sourceTotal = sources.reduce((sum, node) => sum + node.value, 0);
-  const signature = allNodes.map((node) => `${node.id}:${node.rawValue.toFixed(4)}:${node.children.length}`).join("|");
+  const signature = allNodes.map((node) => `${node.id}:${node.name}:${node.rawValue.toFixed(4)}:${node.children.length}`).join("|");
 
   return {
     sources,
@@ -185,10 +187,10 @@ function clampPercentage(value: unknown): number {
   return Math.min(100, Math.max(0, parsed));
 }
 
-function createRestNode(parent: GraphNode, value: number): GraphNode {
+function createRestNode(parent: GraphNode, value: number, language: ReturnType<typeof resolveLanguage>): GraphNode {
   const node: GraphNode = {
     id: `${parent.id}__rest`,
-    name: `Resto ${parent.name}`,
+    name: `${t(language, "restPrefix")} ${parent.name}`,
     icon: "mdi:dots-horizontal",
     role: "rest",
     value: Math.max(0, value),

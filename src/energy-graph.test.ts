@@ -20,8 +20,26 @@ describe("buildEnergyGraph", () => {
     const graph = buildEnergyGraph(config, hass({ kitchen: 2000, oven: 1200, microwave: 300 }), "power");
     const rest = graph.primaryRoot?.children.find((node) => node.virtual);
 
-    expect(rest?.name).toBe("Resto Cocina");
+    expect(rest?.name).toBe("Rest of Cocina");
     expect(rest?.value).toBeCloseTo(0.5);
+  });
+
+  it("localizes calculated rest nodes from card language", () => {
+    const config: NexusEnergyCardConfig = {
+      language: "es",
+      nodes: [
+        {
+          id: "kitchen",
+          name: "Cocina",
+          entity: "sensor.kitchen",
+          children: [{ id: "oven", name: "Horno", entity: "sensor.oven" }]
+        }
+      ]
+    };
+    const graph = buildEnergyGraph(config, hass({ kitchen: 2000, oven: 1200 }), "power");
+    const rest = graph.primaryRoot?.children.find((node) => node.virtual);
+
+    expect(rest?.name).toBe("Resto Cocina");
   });
 
   it("marks overflow and clamps the rest node to zero", () => {

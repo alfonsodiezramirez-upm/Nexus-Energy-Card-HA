@@ -91,6 +91,20 @@ const result = await send("Runtime.evaluate", {
       const nodeGridColumns = nodeGrid ? getComputedStyle(nodeGrid).gridTemplateColumns.split(' ').filter(Boolean).length : 0;
       const editorShell = root.querySelector('.editor');
       const noHorizontalOverflowAfterFirstAdd = editorShell.scrollWidth <= editorShell.clientWidth + 1;
+      const hasIconPicker = root.querySelectorAll('ha-icon-picker').length >= 2;
+      const languageSelect = [...root.querySelectorAll('label')]
+        .find((label) => label.textContent.includes('Idioma de la interfaz'))
+        ?.querySelector('select');
+      const hasLanguageSelect = Boolean(languageSelect) && languageSelect.options.length >= 9 && languageSelect.value === 'auto';
+      const scaleInput = [...root.querySelectorAll('label')]
+        .find((label) => label.textContent.includes('Escala global de la tarjeta'))
+        ?.querySelector('input[type="range"]');
+      const hasScaleSlider =
+        Boolean(scaleInput) &&
+        scaleInput.min === '50' &&
+        scaleInput.max === '150' &&
+        scaleInput.step === '5' &&
+        scaleInput.value === '100';
       const parentSelect = root.querySelector('.node-form select');
       const selectStyle = parentSelect ? getComputedStyle(parentSelect) : undefined;
       const selectedOption = parentSelect ? [...parentSelect.options].find((option) => option.selected) : undefined;
@@ -150,6 +164,9 @@ const result = await send("Runtime.evaluate", {
           expandedAfterFirstAdd === 1 &&
           nodeGridColumns === 1 &&
           noHorizontalOverflowAfterFirstAdd &&
+          hasIconPicker &&
+          hasLanguageSelect &&
+          hasScaleSlider &&
           selectContrast >= 4.5 &&
           selectedOptionContrast >= 4.5 &&
           normalOptionContrast >= 4.5 &&
@@ -171,6 +188,9 @@ const result = await send("Runtime.evaluate", {
         expandedAfterFirstAdd,
         nodeGridColumns,
         noHorizontalOverflowAfterFirstAdd,
+        hasIconPicker,
+        hasLanguageSelect,
+        hasScaleSlider,
         selectContrast,
         selectedOptionContrast,
         normalOptionContrast,

@@ -91,6 +91,31 @@ const result = await send("Runtime.evaluate", {
       const nodeGridColumns = nodeGrid ? getComputedStyle(nodeGrid).gridTemplateColumns.split(' ').filter(Boolean).length : 0;
       const editorShell = root.querySelector('.editor');
       const noHorizontalOverflowAfterFirstAdd = editorShell.scrollWidth <= editorShell.clientWidth + 1;
+      const parentSelect = root.querySelector('.node-form select');
+      const selectStyle = parentSelect ? getComputedStyle(parentSelect) : undefined;
+      const selectedOption = parentSelect ? [...parentSelect.options].find((option) => option.selected) : undefined;
+      const normalOption = parentSelect ? [...parentSelect.options].find((option) => !option.selected && !option.disabled) : undefined;
+      const selectedOptionStyle = selectedOption ? getComputedStyle(selectedOption) : undefined;
+      const normalOptionStyle = normalOption ? getComputedStyle(normalOption) : undefined;
+      const rgb = (value) => {
+        const match = String(value ?? '').match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);
+        return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : [0, 0, 0];
+      };
+      const luminance = ([r, g, b]) => {
+        const channel = (v) => {
+          const normalized = v / 255;
+          return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+        };
+        return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+      };
+      const contrast = (foreground, background) => {
+        const light = Math.max(luminance(foreground), luminance(background));
+        const dark = Math.min(luminance(foreground), luminance(background));
+        return (light + 0.05) / (dark + 0.05);
+      };
+      const selectContrast = selectStyle ? contrast(rgb(selectStyle.color), rgb(selectStyle.backgroundColor)) : 0;
+      const selectedOptionContrast = selectedOptionStyle ? contrast(rgb(selectedOptionStyle.color), rgb(selectedOptionStyle.backgroundColor)) : 0;
+      const normalOptionContrast = normalOptionStyle ? contrast(rgb(normalOptionStyle.color), rgb(normalOptionStyle.backgroundColor)) : 0;
       const nameInput = [...root.querySelectorAll('.node-form label')]
         .find((label) => label.textContent.includes('Nombre a mostrar'))
         ?.querySelector('input');
@@ -125,6 +150,9 @@ const result = await send("Runtime.evaluate", {
           expandedAfterFirstAdd === 1 &&
           nodeGridColumns === 1 &&
           noHorizontalOverflowAfterFirstAdd &&
+          selectContrast >= 4.5 &&
+          selectedOptionContrast >= 4.5 &&
+          normalOptionContrast >= 4.5 &&
           expandedAfterTyping === 1 &&
           typedNameVisible &&
           rowsAfterSourceAdd === 2 &&
@@ -143,6 +171,15 @@ const result = await send("Runtime.evaluate", {
         expandedAfterFirstAdd,
         nodeGridColumns,
         noHorizontalOverflowAfterFirstAdd,
+        selectContrast,
+        selectedOptionContrast,
+        normalOptionContrast,
+        selectColor: selectStyle?.color,
+        selectBackground: selectStyle?.backgroundColor,
+        selectedOptionColor: selectedOptionStyle?.color,
+        selectedOptionBackground: selectedOptionStyle?.backgroundColor,
+        normalOptionColor: normalOptionStyle?.color,
+        normalOptionBackground: normalOptionStyle?.backgroundColor,
         expandedAfterTyping,
         typedNameVisible,
         rowsAfterSourceAdd,

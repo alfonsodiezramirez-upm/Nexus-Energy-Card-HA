@@ -661,6 +661,12 @@ export class NexusEnergyCardEditor extends LitElement {
       --editor-muted: var(--secondary-text-color, rgba(230, 240, 250, 0.68));
       --editor-accent: #3aa7ff;
       --editor-danger: #ff6259;
+      --editor-field-bg: #111c29;
+      --editor-field-bg-hover: #162535;
+      --editor-option-bg: #101b28;
+      --editor-option-bg-selected: #236fae;
+      --editor-option-text: #eef5ff;
+      --editor-option-muted: rgba(238, 245, 255, 0.56);
     }
 
     *,
@@ -868,6 +874,7 @@ export class NexusEnergyCardEditor extends LitElement {
 
     input,
     select {
+      color-scheme: dark;
       box-sizing: border-box;
       width: 100%;
       max-width: 100%;
@@ -875,16 +882,52 @@ export class NexusEnergyCardEditor extends LitElement {
       border: 1px solid rgba(150, 180, 210, 0.24);
       border-radius: 8px;
       padding: 0 10px;
-      color: var(--primary-text-color, #eef5ff);
-      background: rgba(0, 0, 0, 0.18);
+      color: var(--editor-option-text);
+      background-color: var(--editor-field-bg);
       font: inherit;
       letter-spacing: 0;
       outline: 0;
     }
 
+    select {
+      background-image:
+        linear-gradient(45deg, transparent 50%, rgba(238, 245, 255, 0.78) 50%),
+        linear-gradient(135deg, rgba(238, 245, 255, 0.78) 50%, transparent 50%);
+      background-position:
+        calc(100% - 16px) 50%,
+        calc(100% - 11px) 50%;
+      background-repeat: no-repeat;
+      background-size:
+        5px 5px,
+        5px 5px;
+      padding-right: 30px;
+      appearance: none;
+    }
+
+    select:hover,
+    input:hover {
+      background-color: var(--editor-field-bg-hover);
+    }
+
     input:focus,
     select:focus {
       border-color: rgba(90, 170, 255, 0.64);
+    }
+
+    select option,
+    select optgroup {
+      color: var(--editor-option-text);
+      background-color: var(--editor-option-bg);
+    }
+
+    select option:checked {
+      color: #ffffff;
+      background-color: var(--editor-option-bg-selected);
+    }
+
+    select option:disabled {
+      color: var(--editor-option-muted);
+      background-color: var(--editor-option-bg);
     }
 
     input[type="color"] {

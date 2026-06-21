@@ -121,7 +121,7 @@ const result = await send("Runtime.evaluate", {
       const targetXs = outgoingMetrics.map((path) => path.targetX);
       const spreadBottomAnchors = startXs.length > 1 && startXs.every((value, index) => index === 0 || value >= startXs[index - 1]);
       const crossingFreeMapping = targetXs.length > 1 && targetXs.every((value, index) => index === 0 || value >= targetXs[index - 1]);
-      const breathingRoom = Boolean(homeRect && groundRect && groundRect.top - homeRect.bottom >= 39);
+      const breathingRoom = Boolean(homeRect && groundRect && groundRect.top - homeRect.bottom >= 29);
       const titleStyle = nodeTitle ? getComputedStyle(nodeTitle) : undefined;
 
       return {

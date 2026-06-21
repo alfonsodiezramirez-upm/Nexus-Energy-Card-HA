@@ -18,36 +18,36 @@ interface LayoutOptions {
   hideZeroNodes?: boolean;
 }
 
-const DEVICE_NODE_WIDTH = 304;
-const DEVICE_NODE_HEIGHT = 72;
-const SOURCE_NODE_MIN_WIDTH = 218;
-const SOURCE_NODE_MAX_WIDTH = 232;
-const ROOT_NODE_WIDTH = 270;
-const ROOT_NODE_HEIGHT = 410;
-const HORIZONTAL_COLUMN_GAP = 52;
-const HORIZONTAL_SIBLING_GAP = 16;
-const HORIZONTAL_GROUP_GAP = 32;
+const DEVICE_NODE_WIDTH = 228;
+const DEVICE_NODE_HEIGHT = 54;
+const SOURCE_NODE_MIN_WIDTH = 164;
+const SOURCE_NODE_MAX_WIDTH = 174;
+const ROOT_NODE_WIDTH = 203;
+const ROOT_NODE_HEIGHT = 308;
+const HORIZONTAL_COLUMN_GAP = 39;
+const HORIZONTAL_SIBLING_GAP = 12;
+const HORIZONTAL_GROUP_GAP = 24;
 const HORIZONTAL_SOURCE_GAP = HORIZONTAL_SIBLING_GAP;
-const COMPACT_OUTER_PADDING = 16;
+const COMPACT_OUTER_PADDING = 12;
 const COMPACT_CHILD_SIDE_PADDING = 0;
-const COMPACT_GRID_GAP = 8;
-const COMPACT_SECTION_GAP = 40;
-const COMPACT_NODE_MIN_WIDTH = 140;
-const COMPACT_NODE_HEIGHT = 64;
-const COMPACT_SOURCE_HEIGHT = 68;
-const COMPACT_ROOT_MAX_WIDTH = 300;
-const COMPACT_ROOT_HEIGHT = 300;
-const ULTRA_OUTER_PADDING = 12;
-const ULTRA_CHILD_SIDE_PADDING = 20;
-const ULTRA_SECTION_GAP = 24;
-const ULTRA_NODE_HEIGHT = 62;
-const ULTRA_SOURCE_HEIGHT = 58;
-const ULTRA_ROOT_MAX_WIDTH = 280;
-const ULTRA_ROOT_HEIGHT = 220;
+const COMPACT_GRID_GAP = 6;
+const COMPACT_SECTION_GAP = 30;
+const COMPACT_NODE_MIN_WIDTH = 105;
+const COMPACT_NODE_HEIGHT = 48;
+const COMPACT_SOURCE_HEIGHT = 51;
+const COMPACT_ROOT_MAX_WIDTH = 225;
+const COMPACT_ROOT_HEIGHT = 225;
+const ULTRA_OUTER_PADDING = 9;
+const ULTRA_CHILD_SIDE_PADDING = 15;
+const ULTRA_SECTION_GAP = 18;
+const ULTRA_NODE_HEIGHT = 47;
+const ULTRA_SOURCE_HEIGHT = 44;
+const ULTRA_ROOT_MAX_WIDTH = 210;
+const ULTRA_ROOT_HEIGHT = 165;
 
 export function layoutGraph(graph: GraphBuildResult, options: LayoutOptions): GraphLayout {
   const width = Math.max(280, options.width);
-  const height = Math.max(520, options.height);
+  const height = Math.max(390, options.height);
   const sourceNodes = layoutSources(graph.sources, width, height, options.orientation, options.hideZeroNodes ?? false);
   const primaryRoot = graph.primaryRoot;
 
@@ -70,7 +70,7 @@ export function layoutGraph(graph: GraphBuildResult, options: LayoutOptions): Gr
     return {
       orientation: options.orientation,
       width,
-      height: Math.max(height, Math.max(...positionedTree.map((node) => node.y + node.height + 32), 0)),
+      height: Math.max(height, Math.max(...positionedTree.map((node) => node.y + node.height + 24), 0)),
       nodes: [...sourceNodes, ...positionedTree],
       sources: sourceNodes,
       primaryRoot: primary,
@@ -85,7 +85,7 @@ export function layoutGraph(graph: GraphBuildResult, options: LayoutOptions): Gr
   return {
     orientation: options.orientation,
     width,
-    height: Math.max(height, Math.max(...positionedTree.map((node) => node.y + node.height + 32), 0)),
+    height: Math.max(height, Math.max(...positionedTree.map((node) => node.y + node.height + 24), 0)),
     nodes: [...sourceNodes, ...positionedTree],
     sources: sourceNodes,
     primaryRoot: primary,
@@ -104,7 +104,7 @@ export function edgePath(edge: PositionedEdge, orientation: NexusOrientation): s
 
   if (orientation === "stacked") {
     if (edge.from.role === "source" || edge.to.depth === 0) {
-      const offset = Math.min(28, Math.abs(to.y - from.y) * 0.42);
+      const offset = Math.min(21, Math.abs(to.y - from.y) * 0.42);
       return `M ${from.x} ${from.y} C ${from.x} ${from.y + offset}, ${to.x} ${to.y - offset}, ${to.x} ${to.y}`;
     }
 
@@ -165,13 +165,13 @@ function layoutSources(
 
   if (orientation === "horizontal") {
     const nodeWidth = Math.min(SOURCE_NODE_MAX_WIDTH, Math.max(SOURCE_NODE_MIN_WIDTH, width * 0.16));
-    const nodeHeight = 112;
+    const nodeHeight = 84;
     const gap = HORIZONTAL_SOURCE_GAP;
     const totalHeight = visibleSources.length * nodeHeight + Math.max(0, visibleSources.length - 1) * gap;
-    const startY = Math.max(116, (height - totalHeight) / 2);
+    const startY = Math.max(87, (height - totalHeight) / 2);
     return visibleSources.map((node, index) => ({
       ...node,
-      x: 32,
+      x: 24,
       y: startY + index * (nodeHeight + gap),
       width: nodeWidth,
       height: nodeHeight,
@@ -181,7 +181,7 @@ function layoutSources(
   }
 
   if (orientation === "stacked") {
-    const nodeWidth = Math.min(280, Math.max(COMPACT_NODE_MIN_WIDTH, width - ULTRA_OUTER_PADDING * 2));
+    const nodeWidth = Math.min(210, Math.max(COMPACT_NODE_MIN_WIDTH, width - ULTRA_OUTER_PADDING * 2));
     const nodeHeight = ULTRA_SOURCE_HEIGHT;
     return visibleSources.map((node, index) => ({
       ...node,
@@ -313,7 +313,7 @@ function positionHorizontalHierarchy(
 ): PositionedNode[] {
   const visibleRoot = hierarchy(root, (node) => visibleChildren(node, options));
   const maxDepth = Math.max(1, visibleRoot.height);
-  const rightPadding = Math.min(56, Math.max(32, width * 0.025));
+  const rightPadding = Math.min(42, Math.max(24, width * 0.025));
   const leafX = width - rightPadding - DEVICE_NODE_WIDTH;
   const xByDepth = new Map<number, number>();
 
@@ -328,7 +328,7 @@ function positionHorizontalHierarchy(
   const maximumRootX = firstColumnX - ROOT_NODE_WIDTH - HORIZONTAL_COLUMN_GAP;
   const rootX = clamp(symmetricalRootX, minimumRootX, maximumRootX);
   const tree = measureHorizontalTree(root, 0, options);
-  const top = Math.max(28, (height - tree.subtreeHeight) / 2);
+  const top = Math.max(21, (height - tree.subtreeHeight) / 2);
   const positioned: PositionedNode[] = [];
 
   placeHorizontalTree(tree, top, rootX, xByDepth, positioned);
@@ -525,12 +525,12 @@ function anchor(
 }
 
 function roundedStackedPath(from: { x: number; y: number }, to: { x: number; y: number }): string {
-  const routeX = Math.max(6, Math.min(from.x, to.x) - 14);
-  const verticalGap = Math.max(18, to.y - from.y);
-  const turnY = from.y + Math.min(22, verticalGap * 0.26);
+  const routeX = Math.max(5, Math.min(from.x, to.x) - 11);
+  const verticalGap = Math.max(14, to.y - from.y);
+  const turnY = from.y + Math.min(17, verticalGap * 0.26);
   const radius = Math.max(
     2,
-    Math.min(8, Math.abs(from.x - routeX) / 2, Math.abs(to.x - routeX) / 2, Math.abs(to.y - turnY) / 3)
+    Math.min(6, Math.abs(from.x - routeX) / 2, Math.abs(to.x - routeX) / 2, Math.abs(to.y - turnY) / 3)
   );
 
   return [

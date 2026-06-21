@@ -12,8 +12,8 @@ describe("layoutGraph", () => {
     expect(depthTwoNodes.length).toBeGreaterThan(3);
     for (const node of depthTwoNodes) {
       expect(node.x).toBe(firstX);
-      expect(node.width).toBe(304);
-      expect(node.height).toBe(72);
+      expect(node.width).toBe(228);
+      expect(node.height).toBe(54);
     }
   });
 
@@ -107,7 +107,7 @@ describe("layoutGraph", () => {
     const sourceRight = Math.max(...layout.sources.map((source) => source.x + source.width));
 
     expect(home.x - sourceRight).toBeCloseTo(firstChild.x - (home.x + home.width), 5);
-    expect(home.x - sourceRight).toBeGreaterThanOrEqual(52);
+    expect(home.x - sourceRight).toBeGreaterThanOrEqual(39);
   });
 
   it("uses the same vertical rhythm for left sources and right sibling groups", () => {
@@ -116,7 +116,7 @@ describe("layoutGraph", () => {
     const sourceGap = layout.sources[1].y - (layout.sources[0].y + layout.sources[0].height);
     const childGap = groundFloor.visibleChildren[1].y - (groundFloor.visibleChildren[0].y + groundFloor.visibleChildren[0].height);
 
-    expect(sourceGap).toBe(16);
+    expect(sourceGap).toBe(12);
     expect(childGap).toBe(sourceGap);
   });
 
@@ -146,7 +146,7 @@ describe("layoutGraph", () => {
     expect(layout.orientation).toBe("vertical");
     expect(firstSource.y + firstSource.height).toBeLessThan(home.y);
     expect(home.y + home.height).toBeLessThan(firstChild.y);
-    expect(home.width).toBeLessThanOrEqual(300);
+    expect(home.width).toBeLessThanOrEqual(225);
 
     for (const node of layout.nodes) {
       expect(node.x).toBeGreaterThanOrEqual(0);
@@ -163,7 +163,7 @@ describe("layoutGraph", () => {
     expect(first.y).toBe(second.y);
     expect(first.x).toBeLessThan(second.x);
     expect(third.y).toBeGreaterThan(first.y);
-    expect(first.width).toBeGreaterThanOrEqual(140);
+    expect(first.width).toBeGreaterThanOrEqual(105);
     expect(first.width).toBe(second.width);
   });
 

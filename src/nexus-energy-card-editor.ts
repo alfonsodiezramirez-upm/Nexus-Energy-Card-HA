@@ -298,13 +298,13 @@ export class NexusEnergyCardEditor extends LitElement {
             <div class="range-row">
               <input
                 type="range"
-                min="1"
-                max="8"
-                step="0.5"
-                .value=${String(this._config.line_width_base ?? 2)}
+                min="0.75"
+                max="6"
+                step="0.25"
+                .value=${String(this._config.line_width_base ?? 1.5)}
                 @input=${(event: Event) => this._patchConfig("line_width_base", Number(valueOf(event)))}
               />
-              <output>${this._config.line_width_base ?? 2}px</output>
+              <output>${this._config.line_width_base ?? 1.5}px</output>
             </div>
           </label>
           <label>

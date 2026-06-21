@@ -83,7 +83,7 @@ const result = await send("Runtime.evaluate", {
       const uniqueWidths = new Set(widths.map((width) => width.toFixed(2))).size;
 
       return {
-        ok: widths.length > 0 && uniqueWidths > 1 && minWidth === 2 && maxWidth >= 9.5 && increasingInputs,
+        ok: widths.length > 0 && uniqueWidths > 1 && minWidth === 1.5 && maxWidth >= 7 && increasingInputs,
         pathCount: widths.length,
         minWidth,
         maxWidth,

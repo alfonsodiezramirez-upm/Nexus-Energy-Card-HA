@@ -1,10 +1,10 @@
 import type { NexusMode } from "./types";
 
-const POWER_MIN_WIDTH = 2;
-const POWER_MAX_WIDTH = 10;
+const POWER_MIN_WIDTH = 1.5;
+const POWER_MAX_WIDTH = 7.5;
 const POWER_RESIDUAL_KW = 0.05;
-const ENERGY_MIN_WIDTH = 3;
-const ENERGY_MAX_WIDTH = 18;
+const ENERGY_MIN_WIDTH = 2.25;
+const ENERGY_MAX_WIDTH = 13.5;
 
 export function calculateEdgeWidth(
   value: number,
@@ -13,7 +13,7 @@ export function calculateEdgeWidth(
   percent: number,
   baseWidth = POWER_MIN_WIDTH
 ): number {
-  const minPowerWidth = clamp(baseWidth, 1, 8);
+  const minPowerWidth = clamp(baseWidth, 0.75, 6);
   const maxPowerWidth = minPowerWidth + (POWER_MAX_WIDTH - POWER_MIN_WIDTH);
   const minEnergyWidth = Math.max(2, minPowerWidth + (ENERGY_MIN_WIDTH - POWER_MIN_WIDTH));
   const maxEnergyWidth = minEnergyWidth + (ENERGY_MAX_WIDTH - ENERGY_MIN_WIDTH);
